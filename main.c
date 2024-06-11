@@ -5,6 +5,9 @@
 #include <histedit.h>
 #include "vendor/mpc.h"
 
+#define MIN(x,y) (x) < (y) ? (x) : (y)
+#define MAX(x,y) (x) > (y) ? (x) : (y)
+
 #ifdef _WIN32
 #include <string.h>
 
@@ -20,6 +23,147 @@ char *readline(char* prompt) {
 void add_history(char* unused) {}
 #endif
 
+int ast_node_count(mpc_ast_t *t) { 
+    if (t->children_num == 0) {
+        return 1;
+    }
+
+    int total = 1;
+    for (int i = 0; i < t->children_num; i++) {
+        total += ast_node_count(t->children[i]);
+    }
+    return total;
+}
+
+int ast_leaf_count(mpc_ast_t *t) {
+    if (t->children_num == 0) {
+        return 1;
+    }
+    
+    int total = 0;
+    for (int i = 0; i < t->children_num; i++) {
+        total += ast_leaf_count(t->children[i]);
+    }
+    return total;
+}
+
+
+enum LVAL_TYPE { 
+    LVAL_NUM, 
+    LVAL_ERR
+};
+
+enum LVAL_ERROR_TYPE { 
+    LERR_DIV_ZERO, 
+    LERR_BAD_OP, 
+    LERR_BAD_NUM 
+};
+
+typedef struct {
+    enum LVAL_TYPE type;
+    long num;
+    enum LVAL_ERROR_TYPE err;
+} lval;
+
+lval lval_num(long x) {
+    lval v = {
+        .type = LVAL_NUM,
+        .num = x,
+    };
+    return v;
+}
+
+lval lval_err(enum LVAL_ERROR_TYPE err) {
+    lval v = {
+        .type = LVAL_ERR,
+        .err = err,
+    };
+    return v;
+}
+
+void lval_print(lval v) {
+    switch (v.type) {
+        case LVAL_NUM:
+            printf("%li", v.num);
+            break;
+        case LVAL_ERR:
+            switch (v.err) {
+                case LERR_DIV_ZERO:
+                    printf("Error: Division by zero!");
+                    break;
+                case LERR_BAD_OP:
+                    printf("Error: Invalid operator!");
+                    break;
+                case LERR_BAD_NUM:
+                    printf("Error: Invalid number!");
+                    break;
+            }
+            break;
+    }
+}
+
+void lval_println(lval v){
+    lval_print(v);
+    putchar('\n');
+}
+
+long powli(long x, long y) {
+    long res = 1;
+    while (y) {
+        res *= x;
+    }
+    return res;
+}
+
+lval eval_op(lval x, char* op, lval y) {
+    if (x.type == LVAL_ERR) {
+        return x;
+    }
+    if (y.type == LVAL_ERR) {
+        return y;
+    }
+
+    if (strcmp(op, "+") == 0) { return lval_num(x.num + y.num); }
+    if (strcmp(op, "-") == 0) { return lval_num(x.num - y.num); }
+    if (strcmp(op, "*") == 0) { return lval_num(x.num * y.num); }
+    if (strcmp(op, "/") == 0) { 
+        if (y.num == 0) {
+            return lval_err(LERR_DIV_ZERO);
+        }
+        return lval_num(x.num / y.num);
+    }
+    if (strcmp(op, "%") == 0) { return lval_num(x.num % y.num); }
+    if (strcmp(op, "^") == 0) { return lval_num(powli(x.num, y.num)); }
+    if (strcmp(op, "min") == 0) { return lval_num(MIN(x.num, y.num)); }
+    if (strcmp(op, "max") == 0) { return lval_num(MAX(x.num, y.num)); }
+
+    return lval_err(LERR_BAD_OP);
+}
+
+lval eval(mpc_ast_t* t) {
+    if (strstr(t->tag, "number")) {
+        errno = 0;
+        long x = strtol(t->contents, NULL, 10);
+        return errno != ERANGE ? lval_num(x) : lval_err(LERR_BAD_NUM);
+    }
+
+    char* op = t->children[1]->contents;
+    lval x = eval(t->children[2]);
+
+    // In case we have '-' as a unary operator
+    if (strcmp(op, "-") == 0 && t->children_num == 4) {
+        x.num = -x.num;
+        return x;
+    }
+
+    int i = 3;
+    while (strstr(t->children[i]->tag, "expr")) {
+        x = eval_op(x, op, eval(t->children[i]));
+        i++;
+    }
+
+    return x;
+}
 
 int main(int argc, char** argv) {
     mpc_parser_t* Number = mpc_new("number");
@@ -29,11 +173,11 @@ int main(int argc, char** argv) {
 
     
     mpca_lang(MPCA_LANG_DEFAULT,
-        "                                                      \
-            number   : /-?[0-9]+/ '.' /[0-9]+/ | /-?[0-9]+/ ;  \
-            operator : '+' | '-' | '*' | '/' | '%' ;           \
-            expr     : <number> | '(' <operator> <expr>+ ')' ; \
-            lispy    : /^/ <operator> <expr>+ /$/ ;            \
+        "                                                                \
+            number   : /-?[0-9]+/ '.' /[0-9]+/ | /-?[0-9]+/ ;            \
+            operator : '+' | '-' | '*' | '/' | '%' | \"min\" | \"max\" ; \
+            expr     : <number> | '(' <operator> <expr>+ ')' ;           \
+            lispy    : /^/ <operator> <expr>+ /$/ ;                      \
         ",
         Number, Operator, Expr, Lispy);
 
@@ -44,7 +188,8 @@ int main(int argc, char** argv) {
         mpc_result_t r;
 
         if (mpc_parse("<stdin>", input, Lispy, &r)) {
-            mpc_ast_print(r.output);
+            lval res = eval(r.output);
+            lval_println(res);
             mpc_ast_delete(r.output);
         } else {
             mpc_err_print(r.error);
