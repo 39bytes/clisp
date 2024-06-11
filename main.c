@@ -59,35 +59,37 @@ enum LVAL_ERROR_TYPE {
     LERR_BAD_NUM 
 };
 
+typedef union {
+    long num; 
+    enum LVAL_ERROR_TYPE err;
+} lval_data;
+
 typedef struct {
     enum LVAL_TYPE type;
-    long num;
-    enum LVAL_ERROR_TYPE err;
+    lval_data data;
 } lval;
 
 lval lval_num(long x) {
-    lval v = {
-        .type = LVAL_NUM,
-        .num = x,
-    };
-    return v;
+    lval res;
+    res.type = LVAL_NUM;
+    res.data.num = x;
+    return res;
 }
 
 lval lval_err(enum LVAL_ERROR_TYPE err) {
-    lval v = {
-        .type = LVAL_ERR,
-        .err = err,
-    };
-    return v;
+    lval res;
+    res.type = LVAL_ERR;
+    res.data.err = err;
+    return res;
 }
 
 void lval_print(lval v) {
     switch (v.type) {
         case LVAL_NUM:
-            printf("%li", v.num);
+            printf("%li", v.data.num);
             break;
         case LVAL_ERR:
-            switch (v.err) {
+            switch (v.data.err) {
                 case LERR_DIV_ZERO:
                     printf("Error: Division by zero!");
                     break;
@@ -122,20 +124,23 @@ lval eval_op(lval x, char* op, lval y) {
     if (y.type == LVAL_ERR) {
         return y;
     }
+    
+    long xv = x.data.num;
+    long yv = y.data.num;
 
-    if (strcmp(op, "+") == 0) { return lval_num(x.num + y.num); }
-    if (strcmp(op, "-") == 0) { return lval_num(x.num - y.num); }
-    if (strcmp(op, "*") == 0) { return lval_num(x.num * y.num); }
+    if (strcmp(op, "+") == 0) { return lval_num(xv + yv); }
+    if (strcmp(op, "-") == 0) { return lval_num(xv - yv); }
+    if (strcmp(op, "*") == 0) { return lval_num(xv * yv); }
     if (strcmp(op, "/") == 0) { 
-        if (y.num == 0) {
+        if (yv == 0) {
             return lval_err(LERR_DIV_ZERO);
         }
-        return lval_num(x.num / y.num);
+        return lval_num(xv / yv);
     }
-    if (strcmp(op, "%") == 0) { return lval_num(x.num % y.num); }
-    if (strcmp(op, "^") == 0) { return lval_num(powli(x.num, y.num)); }
-    if (strcmp(op, "min") == 0) { return lval_num(MIN(x.num, y.num)); }
-    if (strcmp(op, "max") == 0) { return lval_num(MAX(x.num, y.num)); }
+    if (strcmp(op, "%") == 0) { return lval_num(xv % yv); }
+    if (strcmp(op, "^") == 0) { return lval_num(powli(xv, yv)); }
+    if (strcmp(op, "min") == 0) { return lval_num(MIN(xv, yv)); }
+    if (strcmp(op, "max") == 0) { return lval_num(MAX(xv, yv)); }
 
     return lval_err(LERR_BAD_OP);
 }
@@ -151,8 +156,11 @@ lval eval(mpc_ast_t* t) {
     lval x = eval(t->children[2]);
 
     // In case we have '-' as a unary operator
-    if (strcmp(op, "-") == 0 && t->children_num == 4) {
-        x.num = -x.num;
+    if (x.type == LVAL_NUM && 
+        strcmp(op, "-") == 0 && 
+        t->children_num == 4) 
+    {
+        x.data.num = -x.data.num;
         return x;
     }
 
