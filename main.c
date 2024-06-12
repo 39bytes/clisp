@@ -47,20 +47,22 @@ int ast_leaf_count(mpc_ast_t *t) {
     return total;
 }
 
-
 enum LVAL_TYPE { 
     LVAL_NUM, 
+    LVAL_DOUBLE, 
     LVAL_ERR
 };
 
 enum LVAL_ERROR_TYPE { 
     LERR_DIV_ZERO, 
     LERR_BAD_OP, 
-    LERR_BAD_NUM 
+    LERR_BAD_NUM,
+    LERR_MISMATCHED_TYPES,
 };
 
 typedef union {
     long num; 
+    double doub;
     enum LVAL_ERROR_TYPE err;
 } lval_data;
 
@@ -76,6 +78,13 @@ lval lval_num(long x) {
     return res;
 }
 
+lval lval_doub(double x) {
+    lval res;
+    res.type = LVAL_DOUBLE;
+    res.data.doub = x;
+    return res;
+}
+
 lval lval_err(enum LVAL_ERROR_TYPE err) {
     lval res;
     res.type = LVAL_ERR;
@@ -88,6 +97,9 @@ void lval_print(lval v) {
         case LVAL_NUM:
             printf("%li", v.data.num);
             break;
+        case LVAL_DOUBLE:
+            printf("%f", v.data.doub);
+            break;
         case LVAL_ERR:
             switch (v.data.err) {
                 case LERR_DIV_ZERO:
@@ -98,6 +110,9 @@ void lval_print(lval v) {
                     break;
                 case LERR_BAD_NUM:
                     printf("Error: Invalid number!");
+                    break;
+                case LERR_MISMATCHED_TYPES:
+                    printf("Error: Mismatched types!");
                     break;
             }
             break;
@@ -124,45 +139,86 @@ lval eval_op(lval x, char* op, lval y) {
     if (y.type == LVAL_ERR) {
         return y;
     }
-    
-    long xv = x.data.num;
-    long yv = y.data.num;
 
-    if (strcmp(op, "+") == 0) { return lval_num(xv + yv); }
-    if (strcmp(op, "-") == 0) { return lval_num(xv - yv); }
-    if (strcmp(op, "*") == 0) { return lval_num(xv * yv); }
-    if (strcmp(op, "/") == 0) { 
-        if (yv == 0) {
-            return lval_err(LERR_DIV_ZERO);
-        }
-        return lval_num(xv / yv);
+    if (x.type != y.type) {
+        return lval_err(LERR_MISMATCHED_TYPES);
     }
-    if (strcmp(op, "%") == 0) { return lval_num(xv % yv); }
-    if (strcmp(op, "^") == 0) { return lval_num(powli(xv, yv)); }
-    if (strcmp(op, "min") == 0) { return lval_num(MIN(xv, yv)); }
-    if (strcmp(op, "max") == 0) { return lval_num(MAX(xv, yv)); }
+
+    if (x.type == LVAL_NUM && y.type == LVAL_NUM) {
+        long xv = x.data.num;
+        long yv = y.data.num;
+
+        if (strcmp(op, "+") == 0) { return lval_num(xv + yv); }
+        if (strcmp(op, "-") == 0) { return lval_num(xv - yv); }
+        if (strcmp(op, "*") == 0) { return lval_num(xv * yv); }
+        if (strcmp(op, "/") == 0) { 
+            if (yv == 0) {
+                return lval_err(LERR_DIV_ZERO);
+            }
+            return lval_num(xv / yv);
+        }
+        if (strcmp(op, "%") == 0) { return lval_num(xv % yv); }
+        if (strcmp(op, "^") == 0) { return lval_num(powli(xv, yv)); }
+        if (strcmp(op, "min") == 0) { return lval_num(MIN(xv, yv)); }
+        if (strcmp(op, "max") == 0) { return lval_num(MAX(xv, yv)); }
+    } else {
+        double xv = x.data.doub;
+        double yv = y.data.doub;
+
+        if (strcmp(op, "+") == 0) { return lval_doub(xv + yv); }
+        if (strcmp(op, "-") == 0) { return lval_doub(xv - yv); }
+        if (strcmp(op, "*") == 0) { return lval_doub(xv * yv); }
+        if (strcmp(op, "/") == 0) { 
+            if (yv == 0.0) {
+                return lval_err(LERR_DIV_ZERO);
+            }
+            return lval_doub(xv / yv);
+        }
+        if (strcmp(op, "^") == 0) { return lval_doub(pow(xv, yv)); }
+        if (strcmp(op, "min") == 0) { return lval_doub(MIN(xv, yv)); }
+        if (strcmp(op, "max") == 0) { return lval_doub(MAX(xv, yv)); }
+    }
+    
 
     return lval_err(LERR_BAD_OP);
 }
 
 lval eval(mpc_ast_t* t) {
-    if (strstr(t->tag, "number")) {
-        errno = 0;
+    if (strstr(t->tag, "int")) {
+       errno = 0;
         long x = strtol(t->contents, NULL, 10);
         return errno != ERANGE ? lval_num(x) : lval_err(LERR_BAD_NUM);
+    }
+    if (strstr(t->tag, "double")) {
+        errno = 0;
+        // Double consists of 3 children
+        // (0) Leading digits before decimal
+        // (1) Decimal
+        // (2) Decimal digits
+        char *buf = malloc(strlen(t->children[0]->contents) + 1 + strlen(t->children[2]->contents) + 1);
+        strcpy(buf, t->children[0]->contents);
+        strcat(buf, t->children[1]->contents);
+        strcat(buf, t->children[2]->contents);
+        strcat(buf, "\0");
+        printf("Buffer: %s\n", buf);
+
+        double x = strtod(buf, NULL);
+        free(buf);
+
+        return errno != ERANGE ? lval_doub(x) : lval_err(LERR_BAD_NUM);
     }
 
     char* op = t->children[1]->contents;
     lval x = eval(t->children[2]);
 
     // In case we have '-' as a unary operator
-    if (x.type == LVAL_NUM && 
-        strcmp(op, "-") == 0 && 
-        t->children_num == 4) 
-    {
-        x.data.num = -x.data.num;
-        return x;
-    }
+    // if (x.type == LVAL_NUM && 
+    //     strcmp(op, "-") == 0 && 
+    //     t->children_num == 4) 
+    // {
+    //     x.data.num = -x.data.num;
+    //     return x;
+    // }
 
     int i = 3;
     while (strstr(t->children[i]->tag, "expr")) {
@@ -174,6 +230,8 @@ lval eval(mpc_ast_t* t) {
 }
 
 int main(int argc, char** argv) {
+    mpc_parser_t* Int = mpc_new("int");
+    mpc_parser_t* Double = mpc_new("double");
     mpc_parser_t* Number = mpc_new("number");
     mpc_parser_t* Operator = mpc_new("operator");
     mpc_parser_t* Expr = mpc_new("expr");
@@ -182,12 +240,14 @@ int main(int argc, char** argv) {
     
     mpca_lang(MPCA_LANG_DEFAULT,
         "                                                                \
-            number   : /-?[0-9]+/ '.' /[0-9]+/ | /-?[0-9]+/ ;            \
+            int      : /-?[0-9]+/ ;                                      \
+            double   : /-?[0-9]+/ '.' /[0-9]+/ ;                         \
+            number   : <double> | <int> ;                                \
             operator : '+' | '-' | '*' | '/' | '%' | \"min\" | \"max\" ; \
             expr     : <number> | '(' <operator> <expr>+ ')' ;           \
             lispy    : /^/ <operator> <expr>+ /$/ ;                      \
         ",
-        Number, Operator, Expr, Lispy);
+        Int, Double, Number, Operator, Expr, Lispy);
 
     puts("Lispy version 0.1.0");
 
@@ -197,6 +257,7 @@ int main(int argc, char** argv) {
 
         if (mpc_parse("<stdin>", input, Lispy, &r)) {
             lval res = eval(r.output);
+            mpc_ast_print(r.output);
             lval_println(res);
             mpc_ast_delete(r.output);
         } else {
