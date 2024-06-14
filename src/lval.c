@@ -1,80 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
-#include <editline/readline.h>
-#include <histedit.h>
-#include "vendor/mpc.h"
+#include "../vendor/mpc.h"
 #include <assert.h>
+#include "lval.h"
 
 #define MIN(x,y) (x) < (y) ? (x) : (y)
 #define MAX(x,y) (x) > (y) ? (x) : (y)
 
-#ifdef _WIN32
-#include <string.h>
-
-char *readline(char* prompt) {
-    fputs(prompt, stdout);
-    fgets(buffer, 2048, stdin);
-    char *copy = malloc(strlen(buffer) + 1);
-    strcpy(copy, buffer);
-    copy[strlen(copy) - 1] = '\0';
-    return copy;
-}
-
-void add_history(char* unused) {}
-#endif
-
-int ast_node_count(mpc_ast_t *t) { 
-    if (t->children_num == 0) {
-        return 1;
-    }
-
-    int total = 1;
-    for (int i = 0; i < t->children_num; i++) {
-        total += ast_node_count(t->children[i]);
-    }
-    return total;
-}
-
-int ast_leaf_count(mpc_ast_t *t) {
-    if (t->children_num == 0) {
-        return 1;
-    }
-    
-    int total = 0;
-    for (int i = 0; i < t->children_num; i++) {
-        total += ast_leaf_count(t->children[i]);
-    }
-    return total;
-}
-
-enum LVAL_TYPE { 
-    LVAL_INT, 
-    LVAL_DOUBLE, 
-    LVAL_SYM,
-    LVAL_SEXPR,
-    LVAL_ERR,
-};
-
-typedef struct {
-    int count; 
-    struct lval** cell;
-} lval_sexpr_t;
-
-typedef union {
-    long _int; 
-    double _double;
-    char *_err;
-    char *_sym;
-    lval_sexpr_t _sexpr;
-} lval_data;
-
-struct lval {
-    enum LVAL_TYPE type;
-    lval_data data;
-};
-
-typedef struct lval lval;
 
 lval *lval_int(long x) {
     lval *v = malloc(sizeof(lval));
@@ -135,13 +68,13 @@ void lval_del(lval* v) {
     free(v);
 }
 
-lval *lval_read_int(mpc_ast_t *t) {
+static lval *lval_read_int(mpc_ast_t *t) {
     errno = 0;
     long x = strtol(t->contents, NULL, 10);
     return errno != ERANGE ? lval_int(x) : lval_err("invalid number");
 }
 
-lval *lval_read_double(mpc_ast_t *t) {
+static lval *lval_read_double(mpc_ast_t *t) {
     errno = 0;
     // Double consists of 3 children
     // (0) Leading digits before decimal
@@ -159,7 +92,8 @@ lval *lval_read_double(mpc_ast_t *t) {
     return errno != ERANGE ? lval_double(x) : lval_err("invalid floating point number");
 }
 
-lval *lval_add(lval* v, lval* x) {
+
+static lval *lval_add(lval* v, lval* x) {
     assert(v->type == LVAL_SEXPR);
     
     v->data._sexpr.count++;
@@ -187,9 +121,7 @@ lval *lval_read(mpc_ast_t *t) {
     return x;
 }
 
-void lval_print(lval *v);
-
-void lval_expr_print(lval *v, char open, char close) {
+static void lval_expr_print(lval *v, char open, char close) {
     assert(v->type == LVAL_SEXPR);
 
     putchar(open);
@@ -227,7 +159,7 @@ void lval_println(lval *v){
     putchar('\n');
 }
 
-long powli(long x, long y) {
+static long powli(long x, long y) {
     long res = 1;
     while (y) {
         res *= x;
@@ -235,7 +167,7 @@ long powli(long x, long y) {
     return res;
 }
 
-lval *lval_pop(lval* v, int i) {
+static lval *lval_pop(lval* v, int i) {
     assert(v->type == LVAL_SEXPR);
 
     lval_sexpr_t *sexpr = &v->data._sexpr;
@@ -250,13 +182,13 @@ lval *lval_pop(lval* v, int i) {
     return x;
 }
 
-lval *lval_take(lval* v, int i) {
+static lval *lval_take(lval* v, int i) {
     lval *x = lval_pop(v, i);
     lval_del(v);
     return x;
 }
 
-lval *builtin_op(lval *v, char *op) {
+static lval *builtin_op(lval *v, char *op) {
     assert(v->type == LVAL_SEXPR);
     
     lval_sexpr_t *sexpr = &v->data._sexpr;
@@ -335,12 +267,7 @@ lval *builtin_op(lval *v, char *op) {
     return x;
 }
 
-lval *lval_eval(lval *v);
-lval *lval_take(lval *v, int index);
-lval *lval_pop(lval *v, int index);
-lval *builtin_op(lval *v, char *symbol);
-
-lval *lval_eval_sexpr(lval* v) {
+static lval *lval_eval_sexpr(lval* v) {
     assert(v->type == LVAL_SEXPR);
 
     // Evaluate children
@@ -376,49 +303,4 @@ lval *lval_eval(lval* v) {
     }
 
     return v;
-}
-
-int main(int argc, char** argv) {
-    mpc_parser_t* Int = mpc_new("int");
-    mpc_parser_t* Double = mpc_new("double");
-    mpc_parser_t* Number = mpc_new("number");
-    mpc_parser_t* Sexpr = mpc_new("sexpr");
-    mpc_parser_t* Symbol = mpc_new("symbol");
-    mpc_parser_t* Expr = mpc_new("expr");
-    mpc_parser_t* Lispy = mpc_new("lispy");
-
-    
-    mpca_lang(MPCA_LANG_DEFAULT,
-        "                                                                \
-            int      : /-?[0-9]+/ ;                                      \
-            double   : /-?[0-9]+/ '.' /[0-9]+/ ;                         \
-            number   : <double> | <int> ;                                \
-            symbol   : '+' | '-' | '*' | '/' | '%' | \"min\" | \"max\" ; \
-            sexpr    : '(' <expr>* ')' ;                                 \
-            expr     : <number> | <symbol> | <sexpr> ;                   \
-            lispy    : /^/ <expr>* /$/ ;                                 \
-        ",
-        Int, Double, Number, Symbol, Sexpr, Expr, Lispy);
-
-    puts("Lispy version 0.1.0");
-
-    while (true) {
-        char *input = readline("~> ");
-        mpc_result_t r;
-
-        if (mpc_parse("<stdin>", input, Lispy, &r)) {
-            lval *x = lval_eval(lval_read(r.output));
-            lval_println(x);
-            lval_del(x);
-        } else {
-            mpc_err_print(r.error);
-            mpc_err_delete(r.error);
-        }
-
-        add_history(input);
-        free(input);
-    }
-    
-    mpc_cleanup(7, Int, Double, Number, Symbol, Sexpr, Expr, Lispy);
-    return 0;
 }
