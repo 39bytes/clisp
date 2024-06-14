@@ -3,10 +3,10 @@
 enum LVAL_TYPE { 
     LVAL_INT, 
     LVAL_DOUBLE, 
-    LVAL_SYM,
+    LVAL_SYMBOL,
     LVAL_SEXPR,
     LVAL_QEXPR,
-    LVAL_ERR,
+    LVAL_ERROR,
 };
 
 typedef struct {
@@ -22,7 +22,7 @@ typedef struct {
 typedef union {
     long _int; 
     double _double;
-    char *err;
+    char *error;
     char *symbol;
     lval_sexpr_t sexpr;
     lval_qexpr_t qexpr;
@@ -37,8 +37,8 @@ typedef struct lval lval;
 
 lval *lval_int(long x);
 lval *lval_double(double x);
-lval *lval_err(char *m);
-lval *lval_sym(char *s);
+lval *lval_error(char *m);
+lval *lval_symbol(char *s);
 lval *lval_sexpr(void);
 void lval_del(lval* v);
 
