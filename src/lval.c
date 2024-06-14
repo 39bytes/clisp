@@ -26,24 +26,24 @@ lval *lval_double(double x) {
 lval *lval_err(char *m) {
     lval *v = malloc(sizeof(lval));
     v->type = LVAL_ERR;
-    v->data._err = malloc(strlen(m) + 1);
-    strcpy(v->data._err, m);
+    v->data.err = malloc(strlen(m) + 1);
+    strcpy(v->data.err, m);
     return v;
 }
 
 lval *lval_sym(char *s) {
     lval *v = malloc(sizeof(lval));
     v->type = LVAL_SYM;
-    v->data._sym = malloc(strlen(s) + 1);
-    strcpy(v->data._sym, s);
+    v->data.symbol = malloc(strlen(s) + 1);
+    strcpy(v->data.symbol, s);
     return v;
 }
 
 lval *lval_sexpr(void) {
     lval *v = malloc(sizeof(lval));
     v->type = LVAL_SEXPR;
-    v->data._sexpr.count = 0;
-    v->data._sexpr.cell = NULL;
+    v->data.sexpr.count = 0;
+    v->data.sexpr.cell = NULL;
     return v;
 }
 
@@ -53,16 +53,16 @@ void lval_del(lval* v) {
         case LVAL_DOUBLE:
             break;
         case LVAL_ERR:
-            free(v->data._err);
+            free(v->data.err);
             break;
         case LVAL_SYM:
-            free(v->data._sym);
+            free(v->data.symbol);
             break;
         case LVAL_SEXPR:
-            for (int i = 0; i < v->data._sexpr.count; i++) {
-                lval_del(v->data._sexpr.cell[i]);
+            for (int i = 0; i < v->data.sexpr.count; i++) {
+                lval_del(v->data.sexpr.cell[i]);
             }
-            free(v->data._sexpr.cell);
+            free(v->data.sexpr.cell);
             break;
     }
 
@@ -97,7 +97,7 @@ static lval *lval_read_double(mpc_ast_t *t) {
 static lval *lval_add(lval* v, lval* x) {
     assert(v->type == LVAL_SEXPR);
 
-    lval_sexpr_t *sexpr = &v->data._sexpr;
+    lval_sexpr_t *sexpr = &v->data.sexpr;
     
     sexpr->count++;
     sexpr->cell = realloc(sexpr->cell, sizeof(lval*) * sexpr->count);
@@ -127,7 +127,7 @@ lval *lval_read(mpc_ast_t *t) {
 static void lval_expr_print(lval *v, char open, char close) {
     assert(v->type == LVAL_SEXPR);
 
-    lval_sexpr_t *sexpr = &v->data._sexpr;
+    lval_sexpr_t *sexpr = &v->data.sexpr;
 
     putchar(open);
     for (int i = 0; i < sexpr->count; i++) {
@@ -148,10 +148,10 @@ void lval_print(lval *v) {
             printf("%f", v->data._double);
             break;
         case LVAL_ERR:
-            printf("Error: %s", v->data._err);
+            printf("Error: %s", v->data.err);
             break;
         case LVAL_SYM:
-            printf("%s", v->data._sym);
+            printf("%s", v->data.symbol);
             break;
         case LVAL_SEXPR:
             lval_expr_print(v, '(', ')');
@@ -175,7 +175,7 @@ static long powli(long x, long y) {
 static lval *lval_pop(lval* v, int i) {
     assert(v->type == LVAL_SEXPR);
 
-    lval_sexpr_t *sexpr = &v->data._sexpr;
+    lval_sexpr_t *sexpr = &v->data.sexpr;
 
     lval *x = sexpr->cell[i];
 
@@ -196,7 +196,7 @@ static lval *lval_take(lval* v, int i) {
 static lval *builtin_op(lval *v, char *op) {
     assert(v->type == LVAL_SEXPR);
     
-    lval_sexpr_t *sexpr = &v->data._sexpr;
+    lval_sexpr_t *sexpr = &v->data.sexpr;
     enum LVAL_TYPE elem_type = sexpr->cell[0]->type;
 
     if (elem_type != LVAL_INT && elem_type != LVAL_DOUBLE) {
@@ -274,7 +274,7 @@ static lval *builtin_op(lval *v, char *op) {
 static lval *lval_eval_sexpr(lval* v) {
     assert(v->type == LVAL_SEXPR);
 
-    lval_sexpr_t *sexpr = &v->data._sexpr;
+    lval_sexpr_t *sexpr = &v->data.sexpr;
 
     // Evaluate children
     for (int i = 0; i < sexpr->count; i++) {
@@ -298,7 +298,7 @@ static lval *lval_eval_sexpr(lval* v) {
         return lval_err("S-expression does not start with symbol!");
     }
     
-    lval *result = builtin_op(v, f->data._sym);
+    lval *result = builtin_op(v, f->data.symbol);
     lval_del(f);
     return result;
 }

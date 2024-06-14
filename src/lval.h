@@ -5,6 +5,7 @@ enum LVAL_TYPE {
     LVAL_DOUBLE, 
     LVAL_SYM,
     LVAL_SEXPR,
+    LVAL_QEXPR,
     LVAL_ERR,
 };
 
@@ -13,12 +14,18 @@ typedef struct {
     struct lval** cell;
 } lval_sexpr_t;
 
+typedef struct {
+    int count; 
+    struct lval** cell;
+} lval_qexpr_t;
+
 typedef union {
     long _int; 
     double _double;
-    char *_err;
-    char *_sym;
-    lval_sexpr_t _sexpr;
+    char *err;
+    char *symbol;
+    lval_sexpr_t sexpr;
+    lval_qexpr_t qexpr;
 } lval_data;
 
 struct lval {
