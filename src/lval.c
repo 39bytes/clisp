@@ -27,6 +27,7 @@ lval *lval_err(char *m) {
     lval *v = malloc(sizeof(lval));
     v->type = LVAL_ERR;
     v->data._err = malloc(strlen(m) + 1);
+    strcpy(v->data._err, m);
     return v;
 }
 
@@ -95,10 +96,12 @@ static lval *lval_read_double(mpc_ast_t *t) {
 
 static lval *lval_add(lval* v, lval* x) {
     assert(v->type == LVAL_SEXPR);
+
+    lval_sexpr_t *sexpr = &v->data._sexpr;
     
-    v->data._sexpr.count++;
-    v->data._sexpr.cell = realloc(v->data._sexpr.cell, sizeof(lval*) * v->data._sexpr.count);
-    v->data._sexpr.cell[v->data._sexpr.count - 1] = x;
+    sexpr->count++;
+    sexpr->cell = realloc(sexpr->cell, sizeof(lval*) * sexpr->count);
+    sexpr->cell[sexpr->count - 1] = x;
     return v;
 }
 
@@ -124,10 +127,12 @@ lval *lval_read(mpc_ast_t *t) {
 static void lval_expr_print(lval *v, char open, char close) {
     assert(v->type == LVAL_SEXPR);
 
+    lval_sexpr_t *sexpr = &v->data._sexpr;
+
     putchar(open);
-    for (int i = 0; i < v->data._sexpr.count; i++) {
-        lval_print(v->data._sexpr.cell[i]);
-        if (i != (v->data._sexpr.count-1)) {
+    for (int i = 0; i < sexpr->count; i++) {
+        lval_print(sexpr->cell[i]);
+        if (i != (sexpr->count-1)) {
             putchar(' ');
         }
     }
@@ -192,7 +197,6 @@ static lval *builtin_op(lval *v, char *op) {
     assert(v->type == LVAL_SEXPR);
     
     lval_sexpr_t *sexpr = &v->data._sexpr;
-
     enum LVAL_TYPE elem_type = sexpr->cell[0]->type;
 
     if (elem_type != LVAL_INT && elem_type != LVAL_DOUBLE) {
@@ -270,20 +274,22 @@ static lval *builtin_op(lval *v, char *op) {
 static lval *lval_eval_sexpr(lval* v) {
     assert(v->type == LVAL_SEXPR);
 
+    lval_sexpr_t *sexpr = &v->data._sexpr;
+
     // Evaluate children
-    for (int i = 0; i < v->data._sexpr.count; i++) {
-        v->data._sexpr.cell[i] = lval_eval(v->data._sexpr.cell[i]);
+    for (int i = 0; i < sexpr->count; i++) {
+        sexpr->cell[i] = lval_eval(sexpr->cell[i]);
     }
 
     // Error checking
-    for (int i = 0; i < v->data._sexpr.count; i++) {
-        if (v->data._sexpr.cell[i]->type == LVAL_ERR) {
+    for (int i = 0; i < sexpr->count; i++) {
+        if (sexpr->cell[i]->type == LVAL_ERR) {
             return lval_take(v, i);
         }
     }
 
-    if (v->data._sexpr.count == 0) { return v; }
-    if (v->data._sexpr.count == 1) { return lval_take(v, 0); }
+    if (sexpr->count == 0) { return v; }
+    if (sexpr->count == 1) { return lval_take(v, 0); }
 
     lval *f = lval_pop(v, 0);
     if (f->type != LVAL_SYM) {
