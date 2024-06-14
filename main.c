@@ -4,6 +4,7 @@
 #include <editline/readline.h>
 #include <histedit.h>
 #include "vendor/mpc.h"
+#include <assert.h>
 
 #define MIN(x,y) (x) < (y) ? (x) : (y)
 #define MAX(x,y) (x) > (y) ? (x) : (y)
@@ -48,78 +49,180 @@ int ast_leaf_count(mpc_ast_t *t) {
 }
 
 enum LVAL_TYPE { 
-    LVAL_NUM, 
+    LVAL_INT, 
     LVAL_DOUBLE, 
-    LVAL_ERR
+    LVAL_SYM,
+    LVAL_SEXPR,
+    LVAL_ERR,
 };
-
-enum LVAL_ERROR_TYPE { 
-    LERR_DIV_ZERO, 
-    LERR_BAD_OP, 
-    LERR_BAD_NUM,
-    LERR_MISMATCHED_TYPES,
-};
-
-typedef union {
-    long num; 
-    double doub;
-    enum LVAL_ERROR_TYPE err;
-} lval_data;
 
 typedef struct {
+    int count; 
+    struct lval** cell;
+} lval_sexpr_t;
+
+typedef union {
+    long _int; 
+    double _double;
+    char *_err;
+    char *_sym;
+    lval_sexpr_t _sexpr;
+} lval_data;
+
+struct lval {
     enum LVAL_TYPE type;
     lval_data data;
-} lval;
+};
 
-lval lval_num(long x) {
-    lval res;
-    res.type = LVAL_NUM;
-    res.data.num = x;
-    return res;
+typedef struct lval lval;
+
+lval *lval_int(long x) {
+    lval *v = malloc(sizeof(lval));
+    v->type = LVAL_INT;
+    v->data._int = x;
+    return v;
 }
 
-lval lval_doub(double x) {
-    lval res;
-    res.type = LVAL_DOUBLE;
-    res.data.doub = x;
-    return res;
+lval *lval_double(double x) {
+    lval *v = malloc(sizeof(lval));
+    v->type = LVAL_DOUBLE;
+    v->data._double = x;
+    return v;
 }
 
-lval lval_err(enum LVAL_ERROR_TYPE err) {
-    lval res;
-    res.type = LVAL_ERR;
-    res.data.err = err;
-    return res;
+lval *lval_err(char *m) {
+    lval *v = malloc(sizeof(lval));
+    v->type = LVAL_ERR;
+    v->data._err = malloc(strlen(m) + 1);
+    return v;
 }
 
-void lval_print(lval v) {
-    switch (v.type) {
-        case LVAL_NUM:
-            printf("%li", v.data.num);
-            break;
+lval *lval_sym(char *s) {
+    lval *v = malloc(sizeof(lval));
+    v->type = LVAL_SYM;
+    v->data._sym = malloc(strlen(s) + 1);
+    strcpy(v->data._sym, s);
+    return v;
+}
+
+lval *lval_sexpr(void) {
+    lval *v = malloc(sizeof(lval));
+    v->type = LVAL_SEXPR;
+    v->data._sexpr.count = 0;
+    v->data._sexpr.cell = NULL;
+    return v;
+}
+
+void lval_del(lval* v) {
+    switch (v->type) {
+        case LVAL_INT:
         case LVAL_DOUBLE:
-            printf("%f", v.data.doub);
             break;
         case LVAL_ERR:
-            switch (v.data.err) {
-                case LERR_DIV_ZERO:
-                    printf("Error: Division by zero!");
-                    break;
-                case LERR_BAD_OP:
-                    printf("Error: Invalid operator!");
-                    break;
-                case LERR_BAD_NUM:
-                    printf("Error: Invalid number!");
-                    break;
-                case LERR_MISMATCHED_TYPES:
-                    printf("Error: Mismatched types!");
-                    break;
+            free(v->data._err);
+            break;
+        case LVAL_SYM:
+            free(v->data._sym);
+            break;
+        case LVAL_SEXPR:
+            for (int i = 0; i < v->data._sexpr.count; i++) {
+                lval_del(v->data._sexpr.cell[i]);
             }
+            free(v->data._sexpr.cell);
+            break;
+    }
+
+    free(v);
+}
+
+lval *lval_read_int(mpc_ast_t *t) {
+    errno = 0;
+    long x = strtol(t->contents, NULL, 10);
+    return errno != ERANGE ? lval_int(x) : lval_err("invalid number");
+}
+
+lval *lval_read_double(mpc_ast_t *t) {
+    errno = 0;
+    // Double consists of 3 children
+    // (0) Leading digits before decimal
+    // (1) Decimal
+    // (2) Decimal digits
+    char *buf = malloc(strlen(t->children[0]->contents) + 1 + strlen(t->children[2]->contents) + 1);
+    strcpy(buf, t->children[0]->contents);
+    strcat(buf, t->children[1]->contents);
+    strcat(buf, t->children[2]->contents);
+    strcat(buf, "\0");
+
+    double x = strtod(buf, NULL);
+    free(buf);
+
+    return errno != ERANGE ? lval_double(x) : lval_err("invalid floating point number");
+}
+
+lval *lval_add(lval* v, lval* x) {
+    assert(v->type == LVAL_SEXPR);
+    
+    v->data._sexpr.count++;
+    v->data._sexpr.cell = realloc(v->data._sexpr.cell, sizeof(lval*) * v->data._sexpr.count);
+    v->data._sexpr.cell[v->data._sexpr.count - 1] = x;
+    return v;
+}
+
+lval *lval_read(mpc_ast_t *t) {
+    if (strstr(t->tag, "int")) { return lval_read_int(t); }
+    if (strstr(t->tag, "double")) { return lval_read_double(t); }
+    if (strstr(t->tag, "symbol")) { return lval_sym(t->contents); }
+
+    lval *x = NULL;
+    if (strcmp(t->tag, ">") == 0) { x = lval_sexpr(); }
+    if (strstr(t->tag, "sexpr")) { x = lval_sexpr(); }
+    
+    for (int i = 0; i < t->children_num; i++) {
+        if (strcmp(t->children[i]->contents, "(") == 0) { continue; }
+        if (strcmp(t->children[i]->contents, ")") == 0) { continue; }
+        if (strcmp(t->children[i]->tag, "regex") == 0) { continue; }
+        x = lval_add(x, lval_read(t->children[i]));
+    }
+
+    return x;
+}
+
+void lval_print(lval *v);
+
+void lval_expr_print(lval *v, char open, char close) {
+    assert(v->type == LVAL_SEXPR);
+
+    putchar(open);
+    for (int i = 0; i < v->data._sexpr.count; i++) {
+        lval_print(v->data._sexpr.cell[i]);
+        if (i != (v->data._sexpr.count-1)) {
+            putchar(' ');
+        }
+    }
+    putchar(close);
+}
+
+void lval_print(lval *v) {
+    switch (v->type) {
+        case LVAL_INT:
+            printf("%li", v->data._int);
+            break;
+        case LVAL_DOUBLE:
+            printf("%f", v->data._double);
+            break;
+        case LVAL_ERR:
+            printf("Error: %s", v->data._err);
+            break;
+        case LVAL_SYM:
+            printf("%s", v->data._sym);
+            break;
+        case LVAL_SEXPR:
+            lval_expr_print(v, '(', ')');
             break;
     }
 }
 
-void lval_println(lval v){
+void lval_println(lval *v){
     lval_print(v);
     putchar('\n');
 }
@@ -132,108 +235,155 @@ long powli(long x, long y) {
     return res;
 }
 
-lval eval_op(lval x, char* op, lval y) {
-    if (x.type == LVAL_ERR) {
-        return x;
-    }
-    if (y.type == LVAL_ERR) {
-        return y;
-    }
+lval *lval_pop(lval* v, int i) {
+    assert(v->type == LVAL_SEXPR);
 
-    if (x.type != y.type) {
-        return lval_err(LERR_MISMATCHED_TYPES);
-    }
+    lval_sexpr_t *sexpr = &v->data._sexpr;
 
-    if (x.type == LVAL_NUM && y.type == LVAL_NUM) {
-        long xv = x.data.num;
-        long yv = y.data.num;
+    lval *x = sexpr->cell[i];
 
-        if (strcmp(op, "+") == 0) { return lval_num(xv + yv); }
-        if (strcmp(op, "-") == 0) { return lval_num(xv - yv); }
-        if (strcmp(op, "*") == 0) { return lval_num(xv * yv); }
-        if (strcmp(op, "/") == 0) { 
-            if (yv == 0) {
-                return lval_err(LERR_DIV_ZERO);
-            }
-            return lval_num(xv / yv);
-        }
-        if (strcmp(op, "%") == 0) { return lval_num(xv % yv); }
-        if (strcmp(op, "^") == 0) { return lval_num(powli(xv, yv)); }
-        if (strcmp(op, "min") == 0) { return lval_num(MIN(xv, yv)); }
-        if (strcmp(op, "max") == 0) { return lval_num(MAX(xv, yv)); }
-    } else {
-        double xv = x.data.doub;
-        double yv = y.data.doub;
+    int n_after = sexpr->count - i - 1;
+    memmove(&sexpr->cell[i], &sexpr->cell[i+1], sizeof(lval*) * n_after);
 
-        if (strcmp(op, "+") == 0) { return lval_doub(xv + yv); }
-        if (strcmp(op, "-") == 0) { return lval_doub(xv - yv); }
-        if (strcmp(op, "*") == 0) { return lval_doub(xv * yv); }
-        if (strcmp(op, "/") == 0) { 
-            if (yv == 0.0) {
-                return lval_err(LERR_DIV_ZERO);
-            }
-            return lval_doub(xv / yv);
-        }
-        if (strcmp(op, "^") == 0) { return lval_doub(pow(xv, yv)); }
-        if (strcmp(op, "min") == 0) { return lval_doub(MIN(xv, yv)); }
-        if (strcmp(op, "max") == 0) { return lval_doub(MAX(xv, yv)); }
-    }
-    
-
-    return lval_err(LERR_BAD_OP);
+    sexpr->count--;
+    sexpr->cell = realloc(sexpr->cell, sizeof(lval*) * sexpr->count);
+    return x;
 }
 
-lval eval(mpc_ast_t* t) {
-    if (strstr(t->tag, "int")) {
-       errno = 0;
-        long x = strtol(t->contents, NULL, 10);
-        return errno != ERANGE ? lval_num(x) : lval_err(LERR_BAD_NUM);
-    }
-    if (strstr(t->tag, "double")) {
-        errno = 0;
-        // Double consists of 3 children
-        // (0) Leading digits before decimal
-        // (1) Decimal
-        // (2) Decimal digits
-        char *buf = malloc(strlen(t->children[0]->contents) + 1 + strlen(t->children[2]->contents) + 1);
-        strcpy(buf, t->children[0]->contents);
-        strcat(buf, t->children[1]->contents);
-        strcat(buf, t->children[2]->contents);
-        strcat(buf, "\0");
-        printf("Buffer: %s\n", buf);
-
-        double x = strtod(buf, NULL);
-        free(buf);
-
-        return errno != ERANGE ? lval_doub(x) : lval_err(LERR_BAD_NUM);
-    }
-
-    char* op = t->children[1]->contents;
-    lval x = eval(t->children[2]);
-
-    // In case we have '-' as a unary operator
-    // if (x.type == LVAL_NUM && 
-    //     strcmp(op, "-") == 0 && 
-    //     t->children_num == 4) 
-    // {
-    //     x.data.num = -x.data.num;
-    //     return x;
-    // }
-
-    int i = 3;
-    while (strstr(t->children[i]->tag, "expr")) {
-        x = eval_op(x, op, eval(t->children[i]));
-        i++;
-    }
-
+lval *lval_take(lval* v, int i) {
+    lval *x = lval_pop(v, i);
+    lval_del(v);
     return x;
+}
+
+lval *builtin_op(lval *v, char *op) {
+    assert(v->type == LVAL_SEXPR);
+    
+    lval_sexpr_t *sexpr = &v->data._sexpr;
+
+    enum LVAL_TYPE elem_type = sexpr->cell[0]->type;
+
+    if (elem_type != LVAL_INT && elem_type != LVAL_DOUBLE) {
+        lval_del(v);
+        return lval_err("Cannot operate on non-numeric type");
+    }
+
+    for (int i = 1; i < sexpr->count; i++) {
+        if (sexpr->cell[i]->type != elem_type) {
+            lval_del(v);
+            return lval_err("Cannot mix integer and double types in expression");
+        }
+    }
+
+    lval *x = lval_pop(v, 0);
+    
+    // Unary '-'
+    if ((strcmp(op, "-") == 0) && sexpr->count == 0) {
+        if (elem_type == LVAL_INT) {
+            x->data._int = -x->data._int;
+        } else {
+            x->data._double = -x->data._double;
+        }
+    }
+
+    while (sexpr->count > 0) {
+        lval *y = lval_pop(v, 0);
+
+        if (elem_type == LVAL_INT) {
+            if (strcmp(op, "+") == 0) { x->data._int += y->data._int; }
+            else if (strcmp(op, "-") == 0) { x->data._int -= y->data._int; }
+            else if (strcmp(op, "*") == 0) { x->data._int *= y->data._int; }
+            else if (strcmp(op, "/") == 0) { 
+                if (y->data._int == 0) {
+                    return lval_err("division by zero");
+                }
+                x->data._int /= y->data._int;
+            }
+            else if (strcmp(op, "%") == 0) { x->data._int %= y->data._int; }
+            else if (strcmp(op, "^") == 0) { x->data._int = powli(x->data._int, y->data._int); }
+            else if (strcmp(op, "min") == 0) { x->data._int = MIN(x->data._int, y->data._int); }
+            else if (strcmp(op, "max") == 0) { x->data._int = MAX(x->data._int, y->data._int); }
+            else { 
+                lval_del(y);
+                return lval_err("invalid operator");
+            }
+
+            lval_del(y);
+        } else {
+            if (strcmp(op, "+") == 0) { x->data._double += y->data._double; }
+            else if (strcmp(op, "-") == 0) { x->data._double -= y->data._double; }
+            else if (strcmp(op, "*") == 0) { x->data._double *= y->data._double; }
+            else if (strcmp(op, "/") == 0) { 
+                if (y->data._double == 0) {
+                    return lval_err("division by zero");
+                }
+                x->data._double /= y->data._double;
+            }
+            else if (strcmp(op, "^") == 0) { x->data._double = powli(x->data._double, y->data._double); }
+            else if (strcmp(op, "min") == 0) { x->data._double = MIN(x->data._double, y->data._double); }
+            else if (strcmp(op, "max") == 0) { x->data._double = MAX(x->data._double, y->data._double); }
+            else { 
+                lval_del(y);
+                return lval_err("invalid operator");
+            }
+
+            lval_del(y);
+        }
+    }
+
+    lval_del(v);
+    return x;
+}
+
+lval *lval_eval(lval *v);
+lval *lval_take(lval *v, int index);
+lval *lval_pop(lval *v, int index);
+lval *builtin_op(lval *v, char *symbol);
+
+lval *lval_eval_sexpr(lval* v) {
+    assert(v->type == LVAL_SEXPR);
+
+    // Evaluate children
+    for (int i = 0; i < v->data._sexpr.count; i++) {
+        v->data._sexpr.cell[i] = lval_eval(v->data._sexpr.cell[i]);
+    }
+
+    // Error checking
+    for (int i = 0; i < v->data._sexpr.count; i++) {
+        if (v->data._sexpr.cell[i]->type == LVAL_ERR) {
+            return lval_take(v, i);
+        }
+    }
+
+    if (v->data._sexpr.count == 0) { return v; }
+    if (v->data._sexpr.count == 1) { return lval_take(v, 0); }
+
+    lval *f = lval_pop(v, 0);
+    if (f->type != LVAL_SYM) {
+        lval_del(f); 
+        lval_del(v);
+        return lval_err("S-expression does not start with symbol!");
+    }
+    
+    lval *result = builtin_op(v, f->data._sym);
+    lval_del(f);
+    return result;
+}
+
+lval *lval_eval(lval* v) {
+    if (v->type == LVAL_SEXPR) {
+        return lval_eval_sexpr(v);
+    }
+
+    return v;
 }
 
 int main(int argc, char** argv) {
     mpc_parser_t* Int = mpc_new("int");
     mpc_parser_t* Double = mpc_new("double");
     mpc_parser_t* Number = mpc_new("number");
-    mpc_parser_t* Operator = mpc_new("operator");
+    mpc_parser_t* Sexpr = mpc_new("sexpr");
+    mpc_parser_t* Symbol = mpc_new("symbol");
     mpc_parser_t* Expr = mpc_new("expr");
     mpc_parser_t* Lispy = mpc_new("lispy");
 
@@ -243,11 +393,12 @@ int main(int argc, char** argv) {
             int      : /-?[0-9]+/ ;                                      \
             double   : /-?[0-9]+/ '.' /[0-9]+/ ;                         \
             number   : <double> | <int> ;                                \
-            operator : '+' | '-' | '*' | '/' | '%' | \"min\" | \"max\" ; \
-            expr     : <number> | '(' <operator> <expr>+ ')' ;           \
-            lispy    : /^/ <operator> <expr>+ /$/ ;                      \
+            symbol   : '+' | '-' | '*' | '/' | '%' | \"min\" | \"max\" ; \
+            sexpr    : '(' <expr>* ')' ;                                 \
+            expr     : <number> | <symbol> | <sexpr> ;                   \
+            lispy    : /^/ <expr>* /$/ ;                                 \
         ",
-        Int, Double, Number, Operator, Expr, Lispy);
+        Int, Double, Number, Symbol, Sexpr, Expr, Lispy);
 
     puts("Lispy version 0.1.0");
 
@@ -256,10 +407,9 @@ int main(int argc, char** argv) {
         mpc_result_t r;
 
         if (mpc_parse("<stdin>", input, Lispy, &r)) {
-            lval res = eval(r.output);
-            mpc_ast_print(r.output);
-            lval_println(res);
-            mpc_ast_delete(r.output);
+            lval *x = lval_eval(lval_read(r.output));
+            lval_println(x);
+            lval_del(x);
         } else {
             mpc_err_print(r.error);
             mpc_err_delete(r.error);
@@ -269,6 +419,6 @@ int main(int argc, char** argv) {
         free(input);
     }
     
-    mpc_cleanup(4, Number, Operator, Expr, Lispy);
+    mpc_cleanup(7, Int, Double, Number, Symbol, Sexpr, Expr, Lispy);
     return 0;
 }
