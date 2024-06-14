@@ -3,11 +3,7 @@
 #include <stdbool.h>
 #include "../vendor/mpc.h"
 #include <assert.h>
-#include "lval.h"
-
-#define MIN(x,y) (x) < (y) ? (x) : (y)
-#define MAX(x,y) (x) > (y) ? (x) : (y)
-
+#include "builtins.h"
 
 lval *lval_int(long x) {
     lval *v = malloc(sizeof(lval));
@@ -47,6 +43,14 @@ lval *lval_sexpr(void) {
     return v;
 }
 
+lval *lval_qexpr(void) {
+    lval *v = malloc(sizeof(lval));
+    v->type = LVAL_QEXPR;
+    v->data.qexpr.count = 0;
+    v->data.qexpr.cell = NULL;
+    return v;
+}
+
 void lval_del(lval* v) {
     switch (v->type) {
         case LVAL_INT:
@@ -65,6 +69,10 @@ void lval_del(lval* v) {
             free(v->data.sexpr.cell);
             break;
         case LVAL_QEXPR:
+            for (int i = 0; i < v->data.qexpr.count; i++) {
+                lval_del(v->data.qexpr.cell[i]);
+            }
+            free(v->data.qexpr.cell);
             break;
     }
 
@@ -96,15 +104,37 @@ static lval *lval_read_double(mpc_ast_t *t) {
 }
 
 
-static lval *lval_add(lval* v, lval* x) {
-    assert(v->type == LVAL_SEXPR);
+void lval_expr_add(lval_expr_t* e, lval* x) {
+    e->count++;
+    e->cell = realloc(e->cell, sizeof(lval*) * e->count);
+    e->cell[e->count - 1] = x;
+}
 
-    lval_sexpr_t *sexpr = &v->data.sexpr;
-    
-    sexpr->count++;
-    sexpr->cell = realloc(sexpr->cell, sizeof(lval*) * sexpr->count);
-    sexpr->cell[sexpr->count - 1] = x;
-    return v;
+lval *lval_expr_pop(lval_expr_t* e, int i) {
+    lval *x = e->cell[i];
+
+    int n_after = e->count - i - 1;
+    memmove(&e->cell[i], &e->cell[i+1], sizeof(lval*) * n_after);
+
+    e->count--;
+    e->cell = realloc(e->cell, sizeof(lval*) * e->count);
+    return x;
+}
+
+lval *lval_take(lval* v, int i) {
+    assert(v->type == LVAL_SEXPR || v->type == LVAL_QEXPR);
+
+    lval *x = NULL;
+
+    if (v->type == LVAL_SEXPR) {
+        x = lval_expr_pop(&v->data.sexpr, i);
+    }
+    else {
+        x = lval_expr_pop(&v->data.qexpr, i);
+    }
+
+    lval_del(v);
+    return x;
 }
 
 lval *lval_read(mpc_ast_t *t) {
@@ -113,28 +143,39 @@ lval *lval_read(mpc_ast_t *t) {
     if (strstr(t->tag, "symbol")) { return lval_symbol(t->contents); }
 
     lval *x = NULL;
-    if (strcmp(t->tag, ">") == 0) { x = lval_sexpr(); }
-    if (strstr(t->tag, "sexpr")) { x = lval_sexpr(); }
-    
-    for (int i = 0; i < t->children_num; i++) {
-        if (strcmp(t->children[i]->contents, "(") == 0) { continue; }
-        if (strcmp(t->children[i]->contents, ")") == 0) { continue; }
-        if (strcmp(t->children[i]->tag, "regex") == 0) { continue; }
-        x = lval_add(x, lval_read(t->children[i]));
+    if (strcmp(t->tag, ">") == 0 || strstr(t->tag, "sexpr")) {
+        x = lval_sexpr();
+
+        for (int i = 0; i < t->children_num; i++) {
+            if (strcmp(t->children[i]->contents, "(") == 0) { continue; }
+            if (strcmp(t->children[i]->contents, ")") == 0) { continue; }
+            if (strcmp(t->children[i]->tag, "regex") == 0) { continue; }
+            lval_expr_add(&x->data.sexpr, lval_read(t->children[i]));
+        }
+    } else if (strstr(t->tag, "qexpr")) {
+        x = lval_qexpr();
+
+        for (int i = 0; i < t->children_num; i++) {
+            if (strcmp(t->children[i]->contents, "{") == 0) { continue; }
+            if (strcmp(t->children[i]->contents, "}") == 0) { continue; }
+            if (strcmp(t->children[i]->tag, "regex") == 0) { continue; }
+            lval_expr_add(&x->data.qexpr, lval_read(t->children[i]));
+        }
     }
+    
 
     return x;
 }
 
 static void lval_expr_print(lval *v, char open, char close) {
-    assert(v->type == LVAL_SEXPR);
+    assert(v->type == LVAL_SEXPR || v->type == LVAL_QEXPR);
 
-    lval_sexpr_t *sexpr = &v->data.sexpr;
+    lval_expr_t *expr = v->type == LVAL_SEXPR ? &v->data.sexpr : &v->data.qexpr;
 
     putchar(open);
-    for (int i = 0; i < sexpr->count; i++) {
-        lval_print(sexpr->cell[i]);
-        if (i != (sexpr->count-1)) {
+    for (int i = 0; i < expr->count; i++) {
+        lval_print(expr->cell[i]);
+        if (i != (expr->count-1)) {
             putchar(' ');
         }
     }
@@ -169,117 +210,10 @@ void lval_println(lval *v){
     putchar('\n');
 }
 
-static long powli(long x, long y) {
-    long res = 1;
-    while (y) {
-        res *= x;
-    }
-    return res;
-}
-
-static lval *lval_pop(lval* v, int i) {
-    assert(v->type == LVAL_SEXPR);
-
-    lval_sexpr_t *sexpr = &v->data.sexpr;
-
-    lval *x = sexpr->cell[i];
-
-    int n_after = sexpr->count - i - 1;
-    memmove(&sexpr->cell[i], &sexpr->cell[i+1], sizeof(lval*) * n_after);
-
-    sexpr->count--;
-    sexpr->cell = realloc(sexpr->cell, sizeof(lval*) * sexpr->count);
-    return x;
-}
-
-static lval *lval_take(lval* v, int i) {
-    lval *x = lval_pop(v, i);
-    lval_del(v);
-    return x;
-}
-
-static lval *builtin_op(lval *v, char *op) {
-    assert(v->type == LVAL_SEXPR);
-    
-    lval_sexpr_t *sexpr = &v->data.sexpr;
-    enum LVAL_TYPE elem_type = sexpr->cell[0]->type;
-
-    if (elem_type != LVAL_INT && elem_type != LVAL_DOUBLE) {
-        lval_del(v);
-        return lval_error("Cannot operate on non-numeric type");
-    }
-
-    for (int i = 1; i < sexpr->count; i++) {
-        if (sexpr->cell[i]->type != elem_type) {
-            lval_del(v);
-            return lval_error("Cannot mix integer and double types in expression");
-        }
-    }
-
-    lval *x = lval_pop(v, 0);
-    
-    // Unary '-'
-    if ((strcmp(op, "-") == 0) && sexpr->count == 0) {
-        if (elem_type == LVAL_INT) {
-            x->data._int = -x->data._int;
-        } else {
-            x->data._double = -x->data._double;
-        }
-    }
-
-    while (sexpr->count > 0) {
-        lval *y = lval_pop(v, 0);
-
-        if (elem_type == LVAL_INT) {
-            if (strcmp(op, "+") == 0) { x->data._int += y->data._int; }
-            else if (strcmp(op, "-") == 0) { x->data._int -= y->data._int; }
-            else if (strcmp(op, "*") == 0) { x->data._int *= y->data._int; }
-            else if (strcmp(op, "/") == 0) { 
-                if (y->data._int == 0) {
-                    return lval_error("division by zero");
-                }
-                x->data._int /= y->data._int;
-            }
-            else if (strcmp(op, "%") == 0) { x->data._int %= y->data._int; }
-            else if (strcmp(op, "^") == 0) { x->data._int = powli(x->data._int, y->data._int); }
-            else if (strcmp(op, "min") == 0) { x->data._int = MIN(x->data._int, y->data._int); }
-            else if (strcmp(op, "max") == 0) { x->data._int = MAX(x->data._int, y->data._int); }
-            else { 
-                lval_del(y);
-                return lval_error("invalid operator");
-            }
-
-            lval_del(y);
-        } else {
-            if (strcmp(op, "+") == 0) { x->data._double += y->data._double; }
-            else if (strcmp(op, "-") == 0) { x->data._double -= y->data._double; }
-            else if (strcmp(op, "*") == 0) { x->data._double *= y->data._double; }
-            else if (strcmp(op, "/") == 0) { 
-                if (y->data._double == 0) {
-                    return lval_error("division by zero");
-                }
-                x->data._double /= y->data._double;
-            }
-            else if (strcmp(op, "^") == 0) { x->data._double = powli(x->data._double, y->data._double); }
-            else if (strcmp(op, "min") == 0) { x->data._double = MIN(x->data._double, y->data._double); }
-            else if (strcmp(op, "max") == 0) { x->data._double = MAX(x->data._double, y->data._double); }
-            else { 
-                lval_del(y);
-                return lval_error("invalid operator");
-            }
-
-            lval_del(y);
-        }
-    }
-
-    lval_del(v);
-    return x;
-}
-
 static lval *lval_eval_sexpr(lval* v) {
     assert(v->type == LVAL_SEXPR);
 
-    lval_sexpr_t *sexpr = &v->data.sexpr;
+    lval_expr_t *sexpr = &v->data.sexpr;
 
     // Evaluate children
     for (int i = 0; i < sexpr->count; i++) {
@@ -296,14 +230,14 @@ static lval *lval_eval_sexpr(lval* v) {
     if (sexpr->count == 0) { return v; }
     if (sexpr->count == 1) { return lval_take(v, 0); }
 
-    lval *f = lval_pop(v, 0);
+    lval *f = lval_expr_pop(sexpr, 0);
     if (f->type != LVAL_SYMBOL) {
         lval_del(f); 
         lval_del(v);
         return lval_error("S-expression does not start with symbol!");
     }
     
-    lval *result = builtin_op(v, f->data.symbol);
+    lval *result = builtin(v, f->data.symbol);
     lval_del(f);
     return result;
 }

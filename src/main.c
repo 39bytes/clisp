@@ -51,22 +51,26 @@ int main(int argc, char** argv) {
     mpc_parser_t* Double = mpc_new("double");
     mpc_parser_t* Number = mpc_new("number");
     mpc_parser_t* Sexpr = mpc_new("sexpr");
+    mpc_parser_t* Qexpr = mpc_new("qexpr");
     mpc_parser_t* Symbol = mpc_new("symbol");
     mpc_parser_t* Expr = mpc_new("expr");
     mpc_parser_t* Lispy = mpc_new("lispy");
 
     
     mpca_lang(MPCA_LANG_DEFAULT,
-        "                                                                \
-            int      : /-?[0-9]+/ ;                                      \
-            double   : /-?[0-9]+/ '.' /[0-9]+/ ;                         \
-            number   : <double> | <int> ;                                \
-            symbol   : '+' | '-' | '*' | '/' | '%' | \"min\" | \"max\" ; \
-            sexpr    : '(' <expr>* ')' ;                                 \
-            expr     : <number> | <symbol> | <sexpr> ;                   \
-            lispy    : /^/ <expr>* /$/ ;                                 \
+        "                                                                    \
+            int      : /-?[0-9]+/ ;                                          \
+            double   : /-?[0-9]+/ '.' /[0-9]+/ ;                             \
+            number   : <double> | <int> ;                                    \
+            symbol   : '+' | '-' | '*' | '/' | '%'                           \
+                     | \"min\" | \"max\"                                     \
+                     | \"list\" | \"head\" | \"tail\" | \"join\"| \"eval\" ; \
+            sexpr    : '(' <expr>* ')' ;                                     \
+            qexpr    : '{' <expr>* '}' ;                                     \
+            expr     : <number> | <symbol> | <sexpr> | <qexpr> ;             \
+            lispy    : /^/ <expr>* /$/ ;                                     \
         ",
-        Int, Double, Number, Symbol, Sexpr, Expr, Lispy);
+        Int, Double, Number, Symbol, Sexpr, Qexpr, Expr, Lispy);
 
     puts("Lispy version 0.1.0");
 
@@ -87,6 +91,6 @@ int main(int argc, char** argv) {
         free(input);
     }
     
-    mpc_cleanup(7, Int, Double, Number, Symbol, Sexpr, Expr, Lispy);
+    mpc_cleanup(8, Int, Double, Number, Symbol, Sexpr, Qexpr, Expr, Lispy);
     return 0;
 }
