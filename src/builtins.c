@@ -7,12 +7,10 @@
 #define LASSERT(lval, cond, err) \
     if (!(cond)) { lval_del(lval); return lval_error(err); }
 
-/*
- #define LASSERT_ARG_TYPES(lval, type, err) \
-     lval_expr_t _e = expr->type == LVAL_SEXPR ? expr->data.sexpr : expr->data.qexpr\
-     for (int i = 0; i < _e->count; i++) { \
-         LASSERT(lval, _e->cell[i]->type == (type), err) \
-     }*/
+#define LASSERT_ARG_TYPES(lval, arg_type, err) \
+    for (int i = 0; i < lval->data.sexpr.count; i++) { \
+        LASSERT(lval, lval->data.sexpr.cell[i]->type == (arg_type), err); \
+    }
 
 static long powli(long x, long y) {
     long res = 1;
@@ -29,12 +27,8 @@ static lval *builtin_op(lval *v, char *op) {
     enum LVAL_TYPE elem_type = sexpr->cell[0]->type;
 
     LASSERT(v, elem_type == LVAL_INT || elem_type == LVAL_DOUBLE,
-            "Cannot mix integer and double types in expression");
-
-    for (int i = 1; i < sexpr->count; i++) {
-        LASSERT(v, sexpr->cell[i]->type == elem_type, 
-                "Cannot mix integer and double types in expression");
-    }
+            "Operator arguments must be numeric");
+    LASSERT_ARG_TYPES(v, elem_type, "Cannot mix integer and double types in expression");
 
     lval *x = lval_expr_pop(sexpr, 0);
     
@@ -97,7 +91,7 @@ static lval *builtin_head(lval *v) {
 
     lval_expr_t *sexpr = &v->data.sexpr;
     LASSERT(v, sexpr->count == 1, 
-            "Function 'head' received more than one argument");
+            "Function 'head' expected exactly one argument");
 
     lval *arg = sexpr->cell[0];
     LASSERT(v, arg->type == LVAL_QEXPR, 
@@ -117,7 +111,7 @@ static lval *builtin_tail(lval *v) {
 
     lval_expr_t *sexpr = &v->data.sexpr;
     LASSERT(v, sexpr->count == 1, 
-            "Function 'tail' received more than one argument");
+            "Function 'tail' expected exactly one argument");
 
     lval *arg = sexpr->cell[0];
     LASSERT(v, arg->type == LVAL_QEXPR, 
@@ -156,10 +150,7 @@ static lval *builtin_join(lval *v) {
     assert(v->type == LVAL_SEXPR);
 
     lval_expr_t *sexpr = &v->data.sexpr;
-    for (int i = 0; i < sexpr->count; i++) {
-        LASSERT(v, sexpr->cell[i]->type == LVAL_QEXPR, 
-                "Function 'join' expects Q-expressions as arguments");
-    }
+    LASSERT_ARG_TYPES(v, LVAL_QEXPR, "Function 'join' expects Q-expressions as arguments");
     
     lval *x = lval_expr_pop(sexpr, 0);
 
