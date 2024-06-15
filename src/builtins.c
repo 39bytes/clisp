@@ -187,7 +187,7 @@ static lval *builtin_len(lval *v) {
     assert(v->type == LVAL_SEXPR);
     
     lval_expr_t *sexpr = &v->data.sexpr;
-    LASSERT(v, sexpr->count == 1, "Function 'len' expected exactly one arguments");
+    LASSERT(v, sexpr->count == 1, "Function 'len' expected exactly one argument");
 
     lval *arg = lval_take(v, 0);
     LASSERT(v, arg->type == LVAL_QEXPR, "Function 'len' expected a Q-expression as argument");
@@ -198,6 +198,24 @@ static lval *builtin_len(lval *v) {
     return lval_int(len);
 }
 
+static lval *builtin_init(lval *v) {
+    assert(v->type == LVAL_SEXPR);
+    
+    lval_expr_t *sexpr = &v->data.sexpr;
+    LASSERT(v, sexpr->count == 1, "Function 'init' expected exactly one argument");
+
+    lval *arg = lval_take(v, 0);
+    LASSERT(v, arg->type == LVAL_QEXPR, "Function 'init' expected a Q-expression as argument");
+
+    lval_expr_t *qexpr = &arg->data.qexpr;
+    LASSERT(arg, qexpr->count > 0, "Function 'init' received empty Q-expression");
+    lval *x = lval_expr_pop(qexpr, qexpr->count - 1);
+    lval_del(x);
+
+    return arg;
+}
+
+
 lval *builtin(lval *v, char *func) {
     if (strcmp("list", func) == 0) { return builtin_list(v); }
     if (strcmp("head", func) == 0) { return builtin_head(v); }
@@ -205,6 +223,7 @@ lval *builtin(lval *v, char *func) {
     if (strcmp("join", func) == 0) { return builtin_join(v); }
     if (strcmp("cons", func) == 0) { return builtin_cons(v); }
     if (strcmp("len", func) == 0) { return builtin_len(v); }
+    if (strcmp("init", func) == 0) { return builtin_init(v); }
     if (strcmp("eval", func) == 0) { return builtin_eval(v); }
     if (strcmp("min", func) == 0) { return builtin_op(v, "min"); }
     if (strcmp("max", func) == 0) { return builtin_op(v, "max"); }
