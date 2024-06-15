@@ -65,7 +65,7 @@ int main(int argc, char** argv) {
             symbol   : '+' | '-' | '*' | '/' | '%'                           \
                      | \"min\" | \"max\"                                     \
                      | \"list\" | \"head\" | \"tail\" | \"join\"| \"eval\"   \
-                     | \"cons\" ;                                            \
+                     | \"cons\" | \"len\" ;                                            \
             sexpr    : '(' <expr>* ')' ;                                     \
             qexpr    : '{' <expr>* '}' ;                                     \
             expr     : <number> | <symbol> | <sexpr> | <qexpr> ;             \
