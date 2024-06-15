@@ -104,13 +104,27 @@ static lval *lval_read_double(mpc_ast_t *t) {
 }
 
 
-void lval_expr_add(lval_expr_t* e, lval* x) {
+void lval_expr_push_back(lval_expr_t* e, lval* x) {
     e->count++;
     e->cell = realloc(e->cell, sizeof(lval*) * e->count);
     e->cell[e->count - 1] = x;
 }
 
+void lval_expr_push_front(lval_expr_t* e, lval* x) {
+    int n_bytes = sizeof(lval*) * e->count;
+    e->count++;
+    e->cell = realloc(e->cell, sizeof(lval*) * e->count);
+    // Q-expr wasn't empty before
+    // need to move everything forward one
+    if (e->count > 1) {
+        memmove(&e->cell[1], &e->cell[0], n_bytes);
+    }
+    e->cell[0] = x;
+}
+
 lval *lval_expr_pop(lval_expr_t* e, int i) {
+    assert(i < e->count);
+
     lval *x = e->cell[i];
 
     int n_after = e->count - i - 1;
@@ -150,7 +164,7 @@ lval *lval_read(mpc_ast_t *t) {
             if (strcmp(t->children[i]->contents, "(") == 0) { continue; }
             if (strcmp(t->children[i]->contents, ")") == 0) { continue; }
             if (strcmp(t->children[i]->tag, "regex") == 0) { continue; }
-            lval_expr_add(&x->data.sexpr, lval_read(t->children[i]));
+            lval_expr_push_back(&x->data.sexpr, lval_read(t->children[i]));
         }
     } else if (strstr(t->tag, "qexpr")) {
         x = lval_qexpr();
@@ -159,7 +173,7 @@ lval *lval_read(mpc_ast_t *t) {
             if (strcmp(t->children[i]->contents, "{") == 0) { continue; }
             if (strcmp(t->children[i]->contents, "}") == 0) { continue; }
             if (strcmp(t->children[i]->tag, "regex") == 0) { continue; }
-            lval_expr_add(&x->data.qexpr, lval_read(t->children[i]));
+            lval_expr_push_back(&x->data.qexpr, lval_read(t->children[i]));
         }
     }
     

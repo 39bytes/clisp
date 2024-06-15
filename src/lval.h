@@ -45,5 +45,6 @@ void lval_println(lval *v);
 lval *lval_eval(lval *v);
 
 lval *lval_expr_pop(lval_expr_t* e, int i);
-void lval_expr_add(lval_expr_t* e, lval* x);
+void lval_expr_push_back(lval_expr_t* e, lval* x);
+void lval_expr_push_front(lval_expr_t* e, lval* x);
 lval *lval_take(lval* v, int i);

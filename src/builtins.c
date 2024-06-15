@@ -160,7 +160,7 @@ static lval *builtin_join(lval *v) {
         lval_expr_t *yq = &y->data.qexpr;
 
         while (yq->count > 0) {
-            lval_expr_add(xq, lval_expr_pop(yq, 0));
+            lval_expr_push_back(xq, lval_expr_pop(yq, 0));
         }
         lval_del(y);
     }
@@ -169,11 +169,26 @@ static lval *builtin_join(lval *v) {
     return x;
 }
 
+static lval *builtin_cons(lval *v) {
+    assert(v->type == LVAL_SEXPR);
+    
+    lval_expr_t *sexpr = &v->data.sexpr;
+    LASSERT(v, sexpr->count == 2, "Function 'cons' expected exactly two arguments");
+
+    lval *arg1 = lval_expr_pop(sexpr, 0);
+    lval *arg2 = lval_expr_pop(sexpr, 0);
+    LASSERT(v, arg2->type == LVAL_QEXPR, "Function 'cons' expected a Q-expression as second argument");
+    
+    lval_expr_push_front(&arg2->data.qexpr, arg1);
+    return arg2;
+}
+
 lval *builtin(lval *v, char *func) {
     if (strcmp("list", func) == 0) { return builtin_list(v); }
     if (strcmp("head", func) == 0) { return builtin_head(v); }
     if (strcmp("tail", func) == 0) { return builtin_tail(v); }
     if (strcmp("join", func) == 0) { return builtin_join(v); }
+    if (strcmp("cons", func) == 0) { return builtin_cons(v); }
     if (strcmp("eval", func) == 0) { return builtin_eval(v); }
     if (strcmp("min", func) == 0) { return builtin_op(v, "min"); }
     if (strcmp("max", func) == 0) { return builtin_op(v, "max"); }
