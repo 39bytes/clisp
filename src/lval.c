@@ -134,13 +134,13 @@ static lval *lval_read_double(mpc_ast_t *t) {
 }
 
 
-void lval_expr_push_back(lval_expr_t* e, lval* x) {
+void lval_expr_push_back(lval_expr* e, lval* x) {
     e->count++;
     e->cell = realloc(e->cell, sizeof(lval*) * e->count);
     e->cell[e->count - 1] = x;
 }
 
-void lval_expr_push_front(lval_expr_t* e, lval* x) {
+void lval_expr_push_front(lval_expr* e, lval* x) {
     int n_bytes = sizeof(lval*) * e->count;
     e->count++;
     e->cell = realloc(e->cell, sizeof(lval*) * e->count);
@@ -152,7 +152,7 @@ void lval_expr_push_front(lval_expr_t* e, lval* x) {
     e->cell[0] = x;
 }
 
-lval *lval_expr_pop(lval_expr_t* e, int i) {
+lval *lval_expr_pop(lval_expr* e, int i) {
     assert(i < e->count);
 
     lval *x = e->cell[i];
@@ -214,7 +214,7 @@ lval *lval_read(mpc_ast_t *t) {
 static void lval_expr_print(lval *v, char open, char close) {
     assert(v->type == LVAL_SEXPR || v->type == LVAL_QEXPR);
 
-    lval_expr_t *expr = v->type == LVAL_SEXPR ? &v->data.sexpr : &v->data.qexpr;
+    lval_expr *expr = v->type == LVAL_SEXPR ? &v->data.sexpr : &v->data.qexpr;
 
     putchar(open);
     for (int i = 0; i < expr->count; i++) {
@@ -279,7 +279,7 @@ lval *lval_copy(lval* v) {
             strcpy(x->data.symbol, v->data.symbol);
             break;
         case LVAL_SEXPR: {
-            lval_expr_t *sexpr = &x->data.sexpr;
+            lval_expr *sexpr = &x->data.sexpr;
             sexpr->count = v->data.sexpr.count;
             sexpr->cell = malloc(sizeof(lval*) * sexpr->count);
             for (int i = 0; i < sexpr->count; i++) {
@@ -288,7 +288,7 @@ lval *lval_copy(lval* v) {
             break;
         }
         case LVAL_QEXPR: {
-            lval_expr_t *qexpr = &x->data.qexpr;
+            lval_expr *qexpr = &x->data.qexpr;
             qexpr->count = v->data.qexpr.count;
             qexpr->cell = malloc(sizeof(lval*) * qexpr->count);
             for (int i = 0; i < qexpr->count; i++) {
@@ -304,55 +304,66 @@ lval *lval_copy(lval* v) {
 lenv* lenv_new(void) {
     lenv *e = malloc(sizeof(lenv));
     e->count = 0;
-    e->syms = NULL;
-    e->vals = NULL;
+    e->entries = NULL;
     return e;
 }
 
 void lenv_del(lenv *e) {
     for (int i = 0; i < e->count; i++) {
-        free(e->syms[i]);
-        lval_del(e->vals[i]);
+        free(e->entries[i]->symbol);
+        lval_del(e->entries[i]->val);
     }
 
-    free(e->syms);
-    free(e->vals);
+    free(e->entries);
     free(e);
 }
 
-lval *lenv_get(lenv *e, char *k) {
+lenv_entry *lenv_lookup(lenv *e, char *k) {
     for (int i = 0; i < e->count; i++) {
-        if (strcmp(e->syms[i], k) == 0) {
-            return lval_copy(e->vals[i]);
+        lenv_entry *entry = e->entries[i];
+        if (strcmp(entry->symbol, k) == 0) {
+            return entry;
         }
     }
-    
-    return lval_error("unbound symbol '%s'", k);
+
+    return NULL;
 }
 
-void lenv_put(lenv *e, char *k, lval *v) {
+lval *lenv_get(lenv *e, char *k) {
+    lenv_entry *entry = lenv_lookup(e, k);
+    if (entry == NULL) {
+        return lval_error("unbound symbol '%s'", k);
+    }
+
+    return lval_copy(entry->val);
+}
+
+void lenv_put(lenv *e, char *k, lval *v, bool builtin) {
     for (int i = 0; i < e->count; i++) {
-        if (strcmp(e->syms[i], k) == 0) {
-            lval_del(e->vals[i]);
-            e->vals[i] = lval_copy(v);
-            return;
+        lenv_entry *entry = e->entries[i];
+        if (strcmp(entry->symbol, k) == 0) {
+            lval_del(entry->val);
+            entry->val = lval_copy(v);
         }
     }
 
     e->count++;
-    e->syms = realloc(e->syms, sizeof(char*) * e->count);
-    e->vals = realloc(e->vals, sizeof(lval*) * e->count);
+    e->entries = realloc(e->entries, sizeof(lenv_entry*) * e->count);
 
-    e->syms[e->count - 1] = malloc(strlen(k) + 1);
-    strcpy(e->syms[e->count - 1], k);
-    e->vals[e->count - 1] = lval_copy(v);
+    lenv_entry *entry = malloc(sizeof(lenv_entry));
+    entry->symbol = malloc(strlen(k) + 1);
+    strcpy(entry->symbol, k);
+    entry->val = lval_copy(v);
+    entry->builtin = builtin;
+
+    e->entries[e->count - 1] = entry;
 }
 
 
 static lval *lval_eval_sexpr(lenv *e, lval* v) {
     assert(v->type == LVAL_SEXPR);
 
-    lval_expr_t *sexpr = &v->data.sexpr;
+    lval_expr *sexpr = &v->data.sexpr;
 
     // Evaluate children
     for (int i = 0; i < sexpr->count; i++) {

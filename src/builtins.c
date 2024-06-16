@@ -45,7 +45,7 @@ static long powli(long x, long y) {
 static lval *builtin_op(lenv *e, lval *v, char *op) {
     assert(v->type == LVAL_SEXPR);
     
-    lval_expr_t *sexpr = &v->data.sexpr;
+    lval_expr *sexpr = &v->data.sexpr;
     enum LVAL_TYPE elem_type = sexpr->cell[0]->type;
 
     LASSERT(v, elem_type == LVAL_INT || elem_type == LVAL_DOUBLE,
@@ -191,15 +191,15 @@ static lval *builtin_eval(lenv *e, lval *v) {
 static lval *builtin_join(lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
 
-    lval_expr_t *sexpr = &v->data.sexpr;
+    lval_expr *sexpr = &v->data.sexpr;
     LASSERT_ARG_TYPES(v, LVAL_QEXPR);
     
     lval *x = lval_expr_pop(sexpr, 0);
 
     while (sexpr->count > 0) {
         lval *y = lval_expr_pop(sexpr, 0);
-        lval_expr_t *xq = &x->data.qexpr;
-        lval_expr_t *yq = &y->data.qexpr;
+        lval_expr *xq = &x->data.qexpr;
+        lval_expr *yq = &y->data.qexpr;
 
         while (yq->count > 0) {
             lval_expr_push_back(xq, lval_expr_pop(yq, 0));
@@ -214,7 +214,7 @@ static lval *builtin_join(lenv *e, lval *v) {
 static lval *builtin_cons(lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
     
-    lval_expr_t *sexpr = &v->data.sexpr;
+    lval_expr *sexpr = &v->data.sexpr;
     LASSERT(v, sexpr->count == 2, "Function 'cons' expected exactly two arguments");
     LASSERT_ARG_COUNT("cons", v, 2);
     LASSERT_ARG_TYPE("cons", v, 1, LVAL_QEXPR);
@@ -256,18 +256,25 @@ static lval *builtin_init(lenv *e, lval *v) {
 static lval *builtin_def(lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
 
-    lval_expr_t *sexpr = &v->data.sexpr;
+    lval_expr *sexpr = &v->data.sexpr;
     LASSERT_ARG_TYPE("def", v, 0, LVAL_QEXPR);
 
-    lval_expr_t *symbols = &sexpr->cell[0]->data.qexpr;
+    lval_expr *symbols = &sexpr->cell[0]->data.qexpr;
     for (int i = 0; i < symbols->count; i++) {
         LASSERT(v, symbols->cell[i]->type == LVAL_SYMBOL, 
                 "Function 'def' requires a list of symbols as first argument");
     }
     LASSERT(v, symbols->count == sexpr->count - 1, 
             "Function 'def' requires the same number of values as is given in the symbol list");
+
     for (int i = 0; i < symbols->count; i++) {
-        lenv_put(e, symbols->cell[i]->data.symbol, sexpr->cell[i+1]);
+        lenv_entry *entry = lenv_lookup(e, symbols->cell[i]->data.symbol);
+        if (entry != NULL && entry->builtin) {
+            return lval_error("Cannot redefine builtin function '%s'", entry->symbol);
+        }
+    }
+    for (int i = 0; i < symbols->count; i++) {
+        lenv_put(e, symbols->cell[i]->data.symbol, sexpr->cell[i+1], false);
     }
 
     lval_del(v);
@@ -276,7 +283,7 @@ static lval *builtin_def(lenv *e, lval *v) {
 
 static void lenv_add_builtin(lenv *e, char *name, lbuiltin func) {
     lval *v = lval_func(func);
-    lenv_put(e, name, v);
+    lenv_put(e, name, v, true);
     lval_del(v);
 }
 

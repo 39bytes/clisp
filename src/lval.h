@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include "../vendor/mpc.h"
 
 enum LVAL_TYPE { 
@@ -15,15 +16,20 @@ char *lval_type_name(enum LVAL_TYPE type);
 typedef struct {
     int count; 
     struct lval** cell;
-} lval_expr_t;
+} lval_expr;
 
 struct lval;
 typedef struct lval lval;
 
+typedef struct {
+    char *symbol;
+    lval *val;
+    bool builtin;
+} lenv_entry;
+
 struct lenv {
     int count;
-    char **syms;
-    lval **vals;
+    lenv_entry **entries;
 };
 typedef struct lenv lenv;
 
@@ -34,8 +40,8 @@ typedef union {
     double _double;
     char *error;
     char *symbol;
-    lval_expr_t sexpr;
-    lval_expr_t qexpr;
+    lval_expr sexpr;
+    lval_expr qexpr;
     lbuiltin func;
 } lval_data;
 
@@ -46,8 +52,9 @@ struct lval {
 
 lenv *lenv_new(void);
 void lenv_del(lenv *e);
+lenv_entry *lenv_lookup(lenv *e, char *k);
 lval *lenv_get(lenv *e, char *k);
-void lenv_put(lenv *e, char *k, lval *v);
+void lenv_put(lenv *e, char *k, lval *v, bool builtin);
 
 lenv *lenv_base(void);
 
@@ -67,7 +74,7 @@ void lval_println(lval *v);
 
 lval *lval_eval(lenv *e, lval *v);
 
-lval *lval_expr_pop(lval_expr_t* e, int i);
-void lval_expr_push_back(lval_expr_t* e, lval* x);
-void lval_expr_push_front(lval_expr_t* e, lval* x);
+lval *lval_expr_pop(lval_expr* e, int i);
+void lval_expr_push_back(lval_expr* e, lval* x);
+void lval_expr_push_front(lval_expr* e, lval* x);
 lval *lval_take(lval* v, int i);
