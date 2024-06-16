@@ -5,6 +5,21 @@
 #include <assert.h>
 #include "lval.h"
 
+
+char *lval_type_name(enum LVAL_TYPE type) {
+    switch (type) {
+        case LVAL_INT: return "int";
+        case LVAL_DOUBLE: return "double";
+        case LVAL_SYMBOL: return "symbol";
+        case LVAL_SEXPR: return "s-expression";
+        case LVAL_QEXPR: return "q-expression";
+        case LVAL_FUNC: return "function";
+        case LVAL_ERROR: return "error";
+    }
+
+    return "unknown";
+}
+
 lval *lval_int(long x) {
     lval *v = malloc(sizeof(lval));
     v->type = LVAL_INT;
@@ -19,11 +34,18 @@ lval *lval_double(double x) {
     return v;
 }
 
-lval *lval_error(char *m) {
+lval *lval_error(char *fmt, ...) {
     lval *v = malloc(sizeof(lval));
     v->type = LVAL_ERROR;
-    v->data.error = malloc(strlen(m) + 1);
-    strcpy(v->data.error, m);
+    
+    va_list va;
+    va_start(va, fmt);
+    v->data.error = malloc(512);
+
+    vsnprintf(v->data.error, 511, fmt, va);
+    v->data.error = realloc(v->data.error, strlen(v->data.error) + 1);
+    va_end(va);
+
     return v;
 }
 
@@ -305,7 +327,7 @@ lval *lenv_get(lenv *e, char *k) {
         }
     }
     
-    return lval_error("unbound symbol");
+    return lval_error("unbound symbol '%s'", k);
 }
 
 void lenv_put(lenv *e, char *k, lval *v) {

@@ -4,12 +4,34 @@
 #define MIN(x,y) (x) < (y) ? (x) : (y)
 #define MAX(x,y) (x) > (y) ? (x) : (y)
 
-#define LASSERT(lval, cond, err) \
-    if (!(cond)) { lval_del(lval); return lval_error(err); }
+#define LASSERT(arg, cond, ...) \
+    if (!(cond)) { \
+        lval *_e = lval_error(__VA_ARGS__); \
+        lval_del(arg); \
+        return _e; \
+    }
 
-#define LASSERT_ARG_TYPES(lval, arg_type, err) \
+#define LASSERT_ARG_COUNT(func_name, arg, expected_count) \
+    LASSERT(arg, arg->data.sexpr.count == expected_count, \
+            "Incorrect argument count for function '%s'. Expected %d, got %d", \
+             func_name, expected_count, arg->data.sexpr.count);
+
+#define LASSERT_ARG_TYPE(func_name, arg, arg_num, arg_type) \
+    lval *_a = arg->data.sexpr.cell[arg_num]; \
+    LASSERT(arg, _a->type = arg_type, \
+            "Incorrect argument type for function '%s'. Expected type '%s' for argument '%d', got %s", \
+             func_name, lval_type_name(arg_type), arg_num + 1, _a->type);
+
+#define LASSERT_QEXPR_NOT_EMPTY(func_name, arg) \
+    LASSERT(arg, arg->data.qexpr.count > 0, \
+            "Function '%s' received empty Q-expression", func_name);
+
+#define LASSERT_ARG_TYPES(lval, arg_type) \
     for (int i = 0; i < lval->data.sexpr.count; i++) { \
-        LASSERT(lval, lval->data.sexpr.cell[i]->type == (arg_type), err); \
+        enum LVAL_TYPE _t = lval->data.sexpr.cell[i]->type; \
+        LASSERT(lval, _t == (arg_type), \
+                "Expected type '%s', got type '%s'", \
+                lval_type_name(arg_type), lval_type_name(_t)); \
     }
 
 static long powli(long x, long y) {
@@ -28,7 +50,7 @@ static lval *builtin_op(lenv *e, lval *v, char *op) {
 
     LASSERT(v, elem_type == LVAL_INT || elem_type == LVAL_DOUBLE,
             "Operator arguments must be numeric");
-    LASSERT_ARG_TYPES(v, elem_type, "Cannot mix integer and double types in expression");
+    LASSERT_ARG_TYPES(v, elem_type);
 
     lval *x = lval_expr_pop(sexpr, 0);
     
@@ -121,17 +143,12 @@ lval *builtin_max(lenv *e, lval *a) {
 static lval *builtin_head(lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
 
-    lval_expr_t *sexpr = &v->data.sexpr;
-    LASSERT(v, sexpr->count == 1, 
-            "Function 'head' expected exactly one argument");
+    LASSERT_ARG_COUNT("head", v, 1);
+    LASSERT_ARG_TYPE("head", v, 0, LVAL_QEXPR);
 
-    lval *arg = sexpr->cell[0];
-    LASSERT(v, arg->type == LVAL_QEXPR, 
-            "Function 'head' expected type Q-expression for argument");
-    LASSERT(v, arg->data.qexpr.count > 0, 
-            "Function 'head' received empty Q-expression");
+    lval *arg = lval_take(v, 0);
+    LASSERT_QEXPR_NOT_EMPTY("head", arg)
 
-    arg = lval_take(v, 0);
     while (arg->data.qexpr.count > 1) {
         lval_del(lval_expr_pop(&arg->data.qexpr, 1));
     }
@@ -141,17 +158,12 @@ static lval *builtin_head(lenv *e, lval *v) {
 static lval *builtin_tail(lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
 
-    lval_expr_t *sexpr = &v->data.sexpr;
-    LASSERT(v, sexpr->count == 1, 
-            "Function 'tail' expected exactly one argument");
+    LASSERT_ARG_COUNT("tail", v, 1);
+    LASSERT_ARG_TYPE("tail", v, 0, LVAL_QEXPR);
 
-    lval *arg = sexpr->cell[0];
-    LASSERT(v, arg->type == LVAL_QEXPR, 
-            "Function 'tail' expected type Q-expression for argument");
-    LASSERT(v, arg->data.qexpr.count > 0, 
-            "Function 'tail' received empty Q-expression");
+    lval *arg = lval_take(v, 0);
+    LASSERT_QEXPR_NOT_EMPTY("tail", arg)
 
-    arg = lval_take(v, 0);
     lval_del(lval_expr_pop(&arg->data.qexpr, 0));
     return arg;
 }
@@ -167,11 +179,9 @@ static lval *builtin_list(lenv *e, lval *v) {
 static lval *builtin_eval(lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
 
-    lval_expr_t *sexpr = &v->data.sexpr;
-    LASSERT(v, sexpr->count == 1,
-            "Function 'eval' expected exactly one argument");
-    LASSERT(v, sexpr->cell[0]->type == LVAL_QEXPR,
-            "Function 'eval' expected type Q-expression for argument");
+    LASSERT_ARG_COUNT("eval", v, 1);
+    LASSERT_ARG_TYPE("eval", v, 0, LVAL_QEXPR);
+
     lval *x = lval_take(v, 0);
     x->type = LVAL_SEXPR;
     x->data.sexpr = x->data.qexpr;
@@ -182,7 +192,7 @@ static lval *builtin_join(lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
 
     lval_expr_t *sexpr = &v->data.sexpr;
-    LASSERT_ARG_TYPES(v, LVAL_QEXPR, "Function 'join' expects Q-expressions as arguments");
+    LASSERT_ARG_TYPES(v, LVAL_QEXPR);
     
     lval *x = lval_expr_pop(sexpr, 0);
 
@@ -206,11 +216,11 @@ static lval *builtin_cons(lenv *e, lval *v) {
     
     lval_expr_t *sexpr = &v->data.sexpr;
     LASSERT(v, sexpr->count == 2, "Function 'cons' expected exactly two arguments");
+    LASSERT_ARG_COUNT("cons", v, 2);
+    LASSERT_ARG_TYPE("cons", v, 1, LVAL_QEXPR);
 
     lval *arg1 = lval_expr_pop(sexpr, 0);
     lval *arg2 = lval_take(v, 0);
-    LASSERT(v, arg2->type == LVAL_QEXPR, "Function 'cons' expected a Q-expression as second argument");
-    
     lval_expr_push_front(&arg2->data.qexpr, arg1);
     return arg2;
 }
@@ -218,12 +228,10 @@ static lval *builtin_cons(lenv *e, lval *v) {
 static lval *builtin_len(lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
     
-    lval_expr_t *sexpr = &v->data.sexpr;
-    LASSERT(v, sexpr->count == 1, "Function 'len' expected exactly one argument");
+    LASSERT_ARG_COUNT("len", v, 1);
+    LASSERT_ARG_TYPE("len", v, 0, LVAL_QEXPR);
 
     lval *arg = lval_take(v, 0);
-    LASSERT(v, arg->type == LVAL_QEXPR, "Function 'len' expected a Q-expression as argument");
-
     int len = arg->data.qexpr.count;
     lval_del(arg);
 
@@ -233,15 +241,13 @@ static lval *builtin_len(lenv *e, lval *v) {
 static lval *builtin_init(lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
     
-    lval_expr_t *sexpr = &v->data.sexpr;
-    LASSERT(v, sexpr->count == 1, "Function 'init' expected exactly one argument");
+    LASSERT_ARG_COUNT("init", v, 1);
+    LASSERT_ARG_TYPE("init", v, 0, LVAL_QEXPR);
 
     lval *arg = lval_take(v, 0);
-    LASSERT(v, arg->type == LVAL_QEXPR, "Function 'init' expected a Q-expression as argument");
+    LASSERT_QEXPR_NOT_EMPTY("init", arg)
 
-    lval_expr_t *qexpr = &arg->data.qexpr;
-    LASSERT(arg, qexpr->count > 0, "Function 'init' received empty Q-expression");
-    lval *x = lval_expr_pop(qexpr, qexpr->count - 1);
+    lval *x = lval_expr_pop(&arg->data.qexpr, arg->data.qexpr.count - 1);
     lval_del(x);
 
     return arg;
@@ -251,9 +257,7 @@ static lval *builtin_def(lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
 
     lval_expr_t *sexpr = &v->data.sexpr;
-
-    LASSERT(v, sexpr->cell[0]->type == LVAL_QEXPR, 
-            "Function 'def' passed incorrect type!");
+    LASSERT_ARG_TYPE("def", v, 0, LVAL_QEXPR);
 
     lval_expr_t *symbols = &sexpr->cell[0]->data.qexpr;
     for (int i = 0; i < symbols->count; i++) {
