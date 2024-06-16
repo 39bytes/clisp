@@ -108,35 +108,35 @@ static lval *builtin_op(lenv *e, lval *v, char *op) {
     return x;
 }
 
-lval *builtin_add(lenv *e, lval *a) {
+static lval *builtin_add(lenv *e, lval *a) {
     return builtin_op(e, a, "+");
 }
 
-lval *builtin_sub(lenv *e, lval *a) {
+static lval *builtin_sub(lenv *e, lval *a) {
     return builtin_op(e, a, "-");
 }
 
-lval *builtin_mul(lenv *e, lval *a) {
+static lval *builtin_mul(lenv *e, lval *a) {
     return builtin_op(e, a, "*");
 }
 
-lval *builtin_div(lenv *e, lval *a) {
+static lval *builtin_div(lenv *e, lval *a) {
     return builtin_op(e, a, "/");
 }
 
-lval *builtin_mod(lenv *e, lval *a) {
+static lval *builtin_mod(lenv *e, lval *a) {
     return builtin_op(e, a, "%");
 }
 
-lval *builtin_pow(lenv *e, lval *a) {
+static lval *builtin_pow(lenv *e, lval *a) {
     return builtin_op(e, a, "^");
 }
 
-lval *builtin_min(lenv *e, lval *a) {
+static lval *builtin_min(lenv *e, lval *a) {
     return builtin_op(e, a, "min");
 }
 
-lval *builtin_max(lenv *e, lval *a) {
+static lval *builtin_max(lenv *e, lval *a) {
     return builtin_op(e, a, "max");
 }
 
@@ -302,26 +302,8 @@ static void lenv_add_builtins(lenv *e) {
     lenv_add_builtin(e, "max", builtin_max);
 }
 
-
 lenv *lenv_base(void) {
     lenv *e = lenv_new();
     lenv_add_builtins(e);
     return e;
-}
-
-lval *builtin(lenv *e, lval *v, char *func) {
-    if (strcmp("list", func) == 0) { return builtin_list(e, v); }
-    if (strcmp("head", func) == 0) { return builtin_head(e, v); }
-    if (strcmp("tail", func) == 0) { return builtin_tail(e, v); }
-    if (strcmp("join", func) == 0) { return builtin_join(e, v); }
-    if (strcmp("cons", func) == 0) { return builtin_cons(e, v); }
-    if (strcmp("len", func) == 0) { return builtin_len(e, v); }
-    if (strcmp("init", func) == 0) { return builtin_init(e, v); }
-    if (strcmp("eval", func) == 0) { return builtin_eval(e, v); }
-    if (strcmp("min", func) == 0) { return builtin_op(e, v, "min"); }
-    if (strcmp("max", func) == 0) { return builtin_op(e, v, "max"); }
-    if (strstr("+-/*%^", func)) { return builtin_op(e, v, func); }
-
-    lval_del(v);
-    return lval_error("Unknown function");
 }

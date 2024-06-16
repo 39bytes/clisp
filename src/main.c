@@ -5,6 +5,7 @@
 #include <histedit.h>
 #include "../vendor/mpc.h"
 #include "lval.h"
+#include "builtins.h"
 
 #ifdef _WIN32
 #include <string.h>
