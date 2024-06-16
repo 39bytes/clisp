@@ -281,6 +281,11 @@ static lval *builtin_def(lenv *e, lval *v) {
     return lval_sexpr();
 }
 
+static lval *builtin_exit(lenv *e, lval *v) {
+    printf("Exiting REPL\n");
+    exit(0);
+}
+
 static void lenv_add_builtin(lenv *e, char *name, lbuiltin func) {
     lval *v = lval_func(func);
     lenv_put(e, name, v, true);
@@ -307,6 +312,8 @@ static void lenv_add_builtins(lenv *e) {
     lenv_add_builtin(e, "^", builtin_pow);
     lenv_add_builtin(e, "min", builtin_min);
     lenv_add_builtin(e, "max", builtin_max);
+
+    lenv_add_builtin(e, "exit", builtin_exit);
 }
 
 lenv *lenv_base(void) {
