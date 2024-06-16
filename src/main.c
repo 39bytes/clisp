@@ -62,10 +62,7 @@ int main(int argc, char** argv) {
             int      : /-?[0-9]+/ ;                                          \
             double   : /-?[0-9]+/ '.' /[0-9]+/ ;                             \
             number   : <double> | <int> ;                                    \
-            symbol   : '+' | '-' | '*' | '/' | '%'                           \
-                     | \"min\" | \"max\"                                     \
-                     | \"list\" | \"head\" | \"tail\" | \"join\"| \"eval\"   \
-                     | \"cons\" | \"len\" | \"init\" ;                                            \
+            symbol   : /[a-zA-Z0-9_+\\-*\\/\\\\=<>!&]+/ ;                    \
             sexpr    : '(' <expr>* ')' ;                                     \
             qexpr    : '{' <expr>* '}' ;                                     \
             expr     : <number> | <symbol> | <sexpr> | <qexpr> ;             \
@@ -75,12 +72,14 @@ int main(int argc, char** argv) {
 
     puts("Lispy version 0.1.0");
 
+    lenv *e = lenv_base();
+
     while (true) {
         char *input = readline("~> ");
         mpc_result_t r;
 
         if (mpc_parse("<stdin>", input, Lispy, &r)) {
-            lval *x = lval_eval(lval_read(r.output));
+            lval *x = lval_eval(e, lval_read(r.output));
             lval_println(x);
             lval_del(x);
         } else {

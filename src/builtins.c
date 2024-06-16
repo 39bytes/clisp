@@ -20,7 +20,7 @@ static long powli(long x, long y) {
     return res;
 }
 
-static lval *builtin_op(lval *v, char *op) {
+static lval *builtin_op(lenv *e, lval *v, char *op) {
     assert(v->type == LVAL_SEXPR);
     
     lval_expr_t *sexpr = &v->data.sexpr;
@@ -70,7 +70,7 @@ static lval *builtin_op(lval *v, char *op) {
                 LASSERT(y, y->data._double != 0, "division by zero");
                 x->data._double /= y->data._double;
             }
-            else if (strcmp(op, "^") == 0) { x->data._double = powli(x->data._double, y->data._double); }
+            else if (strcmp(op, "^") == 0) { x->data._double = powl(x->data._double, y->data._double); }
             else if (strcmp(op, "min") == 0) { x->data._double = MIN(x->data._double, y->data._double); }
             else if (strcmp(op, "max") == 0) { x->data._double = MAX(x->data._double, y->data._double); }
             else { 
@@ -86,7 +86,39 @@ static lval *builtin_op(lval *v, char *op) {
     return x;
 }
 
-static lval *builtin_head(lval *v) {
+lval *builtin_add(lenv *e, lval *a) {
+    return builtin_op(e, a, "+");
+}
+
+lval *builtin_sub(lenv *e, lval *a) {
+    return builtin_op(e, a, "-");
+}
+
+lval *builtin_mul(lenv *e, lval *a) {
+    return builtin_op(e, a, "*");
+}
+
+lval *builtin_div(lenv *e, lval *a) {
+    return builtin_op(e, a, "/");
+}
+
+lval *builtin_mod(lenv *e, lval *a) {
+    return builtin_op(e, a, "%");
+}
+
+lval *builtin_pow(lenv *e, lval *a) {
+    return builtin_op(e, a, "^");
+}
+
+lval *builtin_min(lenv *e, lval *a) {
+    return builtin_op(e, a, "min");
+}
+
+lval *builtin_max(lenv *e, lval *a) {
+    return builtin_op(e, a, "max");
+}
+
+static lval *builtin_head(lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
 
     lval_expr_t *sexpr = &v->data.sexpr;
@@ -106,7 +138,7 @@ static lval *builtin_head(lval *v) {
     return arg;
 }
 
-static lval *builtin_tail(lval *v) {
+static lval *builtin_tail(lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
 
     lval_expr_t *sexpr = &v->data.sexpr;
@@ -124,7 +156,7 @@ static lval *builtin_tail(lval *v) {
     return arg;
 }
 
-static lval *builtin_list(lval *v) {
+static lval *builtin_list(lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
 
     v->type = LVAL_QEXPR;
@@ -132,7 +164,7 @@ static lval *builtin_list(lval *v) {
     return v;
 }
 
-static lval *builtin_eval(lval *v) {
+static lval *builtin_eval(lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
 
     lval_expr_t *sexpr = &v->data.sexpr;
@@ -143,10 +175,10 @@ static lval *builtin_eval(lval *v) {
     lval *x = lval_take(v, 0);
     x->type = LVAL_SEXPR;
     x->data.sexpr = x->data.qexpr;
-    return lval_eval(x);
+    return lval_eval(e, x);
 }
 
-static lval *builtin_join(lval *v) {
+static lval *builtin_join(lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
 
     lval_expr_t *sexpr = &v->data.sexpr;
@@ -169,7 +201,7 @@ static lval *builtin_join(lval *v) {
     return x;
 }
 
-static lval *builtin_cons(lval *v) {
+static lval *builtin_cons(lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
     
     lval_expr_t *sexpr = &v->data.sexpr;
@@ -183,7 +215,7 @@ static lval *builtin_cons(lval *v) {
     return arg2;
 }
 
-static lval *builtin_len(lval *v) {
+static lval *builtin_len(lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
     
     lval_expr_t *sexpr = &v->data.sexpr;
@@ -198,7 +230,7 @@ static lval *builtin_len(lval *v) {
     return lval_int(len);
 }
 
-static lval *builtin_init(lval *v) {
+static lval *builtin_init(lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
     
     lval_expr_t *sexpr = &v->data.sexpr;
@@ -215,19 +247,76 @@ static lval *builtin_init(lval *v) {
     return arg;
 }
 
+static lval *builtin_def(lenv *e, lval *v) {
+    assert(v->type == LVAL_SEXPR);
 
-lval *builtin(lval *v, char *func) {
-    if (strcmp("list", func) == 0) { return builtin_list(v); }
-    if (strcmp("head", func) == 0) { return builtin_head(v); }
-    if (strcmp("tail", func) == 0) { return builtin_tail(v); }
-    if (strcmp("join", func) == 0) { return builtin_join(v); }
-    if (strcmp("cons", func) == 0) { return builtin_cons(v); }
-    if (strcmp("len", func) == 0) { return builtin_len(v); }
-    if (strcmp("init", func) == 0) { return builtin_init(v); }
-    if (strcmp("eval", func) == 0) { return builtin_eval(v); }
-    if (strcmp("min", func) == 0) { return builtin_op(v, "min"); }
-    if (strcmp("max", func) == 0) { return builtin_op(v, "max"); }
-    if (strstr("+-/*%^", func)) { return builtin_op(v, func); }
+    lval_expr_t *sexpr = &v->data.sexpr;
+
+    LASSERT(v, sexpr->cell[0]->type == LVAL_QEXPR, 
+            "Function 'def' passed incorrect type!");
+
+    lval_expr_t *symbols = &sexpr->cell[0]->data.qexpr;
+    for (int i = 0; i < symbols->count; i++) {
+        LASSERT(v, symbols->cell[i]->type == LVAL_SYMBOL, 
+                "Function 'def' requires a list of symbols as first argument");
+    }
+    LASSERT(v, symbols->count == sexpr->count - 1, 
+            "Function 'def' requires the same number of values as is given in the symbol list");
+    for (int i = 0; i < symbols->count; i++) {
+        lenv_put(e, symbols->cell[i]->data.symbol, sexpr->cell[i+1]);
+    }
+
+    lval_del(v);
+    return lval_sexpr();
+}
+
+static void lenv_add_builtin(lenv *e, char *name, lbuiltin func) {
+    lval *v = lval_func(func);
+    lenv_put(e, name, v);
+    lval_del(v);
+}
+
+static void lenv_add_builtins(lenv *e) {
+    lenv_add_builtin(e, "def", builtin_def);
+
+    lenv_add_builtin(e, "list", builtin_list);
+    lenv_add_builtin(e, "head", builtin_head);
+    lenv_add_builtin(e, "tail", builtin_tail);
+    lenv_add_builtin(e, "join", builtin_join);
+    lenv_add_builtin(e, "cons", builtin_cons);
+    lenv_add_builtin(e, "len", builtin_len);
+    lenv_add_builtin(e, "init", builtin_init);
+    lenv_add_builtin(e, "eval", builtin_eval);
+
+    lenv_add_builtin(e, "+", builtin_add);
+    lenv_add_builtin(e, "-", builtin_sub);
+    lenv_add_builtin(e, "*", builtin_mul);
+    lenv_add_builtin(e, "/", builtin_div);
+    lenv_add_builtin(e, "%", builtin_mod);
+    lenv_add_builtin(e, "^", builtin_pow);
+    lenv_add_builtin(e, "min", builtin_min);
+    lenv_add_builtin(e, "max", builtin_max);
+}
+
+
+lenv *lenv_base(void) {
+    lenv *e = lenv_new();
+    lenv_add_builtins(e);
+    return e;
+}
+
+lval *builtin(lenv *e, lval *v, char *func) {
+    if (strcmp("list", func) == 0) { return builtin_list(e, v); }
+    if (strcmp("head", func) == 0) { return builtin_head(e, v); }
+    if (strcmp("tail", func) == 0) { return builtin_tail(e, v); }
+    if (strcmp("join", func) == 0) { return builtin_join(e, v); }
+    if (strcmp("cons", func) == 0) { return builtin_cons(e, v); }
+    if (strcmp("len", func) == 0) { return builtin_len(e, v); }
+    if (strcmp("init", func) == 0) { return builtin_init(e, v); }
+    if (strcmp("eval", func) == 0) { return builtin_eval(e, v); }
+    if (strcmp("min", func) == 0) { return builtin_op(e, v, "min"); }
+    if (strcmp("max", func) == 0) { return builtin_op(e, v, "max"); }
+    if (strstr("+-/*%^", func)) { return builtin_op(e, v, func); }
 
     lval_del(v);
     return lval_error("Unknown function");
