@@ -79,6 +79,7 @@ static lval *builtin_op(lval *v, char *op) {
             else if (strcmp(op, "max") == 0) { x->_int = MAX(x->_int, y->_int); }
             else { 
                 lval_del(y);
+                lval_del(v);
                 return lval_error("invalid operator");
             }
 
@@ -96,6 +97,7 @@ static lval *builtin_op(lval *v, char *op) {
             else if (strcmp(op, "max") == 0) { x->_double = MAX(x->_double, y->_double); }
             else { 
                 lval_del(y);
+                lval_del(v);
                 return lval_error("invalid operator");
             }
 
@@ -274,6 +276,51 @@ lval *builtin_if(UNUSED lenv *e, lval *v) {
     return res;
 }
 
+lval *builtin_bool_op(lval *v, char* op) {
+    assert(v->type == LVAL_SEXPR);
+    LASSERT_ARG_TYPES(v, LVAL_BOOL);
+
+    lval *x = lval_expr_pop(&v->sexpr, 0);
+
+    while (v->sexpr.count > 0) {
+        lval *y = lval_expr_pop(&v->sexpr, 0); 
+
+        if (strcmp(op, "&&") == 0) {
+            x->_bool = x->_bool && y->_bool;
+        } else if (strcmp(op, "||") == 0) {
+            x->_bool = x->_bool || y->_bool;
+        } else {
+            lval_del(y);
+            lval_del(v);
+            return lval_error("Invalid boolean operation");
+        }
+        lval_del(y);
+    }
+    
+
+    lval_del(v);
+    return x;
+}
+
+lval *builtin_and(UNUSED lenv *e, lval *v) {
+    return builtin_bool_op(v, "&&");
+}
+
+lval *builtin_or(UNUSED lenv *e, lval *v) {
+    return builtin_bool_op(v, "||");
+}
+
+lval *builtin_not(UNUSED lenv *e, lval *v) {
+    assert(v->type == LVAL_SEXPR);
+    LASSERT_ARG_COUNT("!", v, 1);
+    LASSERT_ARG_TYPE("!", v, 0, LVAL_BOOL);
+    
+    lval *b = lval_take(v, 0);
+    b->_bool = !b->_bool;
+
+    return b;
+}
+
 lval *builtin_head(UNUSED lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
 
@@ -349,7 +396,6 @@ lval *builtin_cons(UNUSED lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
     
     lval_expr *sexpr = &v->sexpr;
-    LASSERT(v, sexpr->count == 2, "Function 'cons' expected exactly two arguments");
     LASSERT_ARG_COUNT("cons", v, 2);
     LASSERT_ARG_TYPE("cons", v, 1, LVAL_QEXPR);
 
@@ -518,7 +564,13 @@ static void lenv_add_builtins(lenv *e) {
     lenv_add_builtin(e, ">=", builtin_gte);
     lenv_add_builtin(e, "==", builtin_eq);
     lenv_add_builtin(e, "!=", builtin_neq);
+    lenv_add_builtin(e, "&&", builtin_and);
+    lenv_add_builtin(e, "||", builtin_or);
+    lenv_add_builtin(e, "!", builtin_not);
     lenv_add_builtin(e, "if", builtin_if);
+
+    lenv_put(e, "true", lval_bool(true), true);
+    lenv_put(e, "false", lval_bool(false), true);
 
     lenv_add_builtin(e, "exit", builtin_exit);
 }

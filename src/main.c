@@ -52,7 +52,6 @@ int main(UNUSED int argc, UNUSED char** argv) {
     mpc_parser_t* Int = mpc_new("int");
     mpc_parser_t* Double = mpc_new("double");
     mpc_parser_t* Number = mpc_new("number");
-    mpc_parser_t* Bool = mpc_new("bool");
     mpc_parser_t* Sexpr = mpc_new("sexpr");
     mpc_parser_t* Qexpr = mpc_new("qexpr");
     mpc_parser_t* Symbol = mpc_new("symbol");
@@ -64,14 +63,13 @@ int main(UNUSED int argc, UNUSED char** argv) {
             int      : /-?[0-9]+/ ;                                          \
             double   : /-?[0-9]+/ '.' /[0-9]+/ ;                             \
             number   : <double> | <int> ;                                    \
-            bool     : \"true\" | \"false\" ;                                    \
-            symbol   : /[a-zA-Z0-9_+\\-*\\/\\\\=<>!&]+/ ;                    \
+            symbol   : /[a-zA-Z0-9_+\\-*\\/\\\\=<>!&\\|]+/ ;                    \
             sexpr    : '(' <expr>* ')' ;                                     \
             qexpr    : '{' <expr>* '}' ;                                     \
             expr     : <number> | <symbol> | <sexpr> | <qexpr> ;             \
             lispy    : /^/ <expr>* /$/ ;                                     \
         ",
-        Int, Double, Number, Bool, Symbol, Sexpr, Qexpr, Expr, Lispy);
+        Int, Double, Number, Symbol, Sexpr, Qexpr, Expr, Lispy);
 
     puts("Lispy version 0.1.0");
 
@@ -94,7 +92,7 @@ int main(UNUSED int argc, UNUSED char** argv) {
         free(input);
     }
     
-    mpc_cleanup(9, Int, Double, Number, Bool, Symbol, Sexpr, Qexpr, Expr, Lispy);
+    mpc_cleanup(8, Int, Double, Number, Symbol, Sexpr, Qexpr, Expr, Lispy);
     lenv_del(e);
     return 0;
 }
