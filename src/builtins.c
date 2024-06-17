@@ -314,6 +314,34 @@ lval *builtin_put(lenv *e, lval *v) {
     return builtin_var(e, v, "=");
 }
 
+lval *builtin_fun(lenv *e, lval *v) {
+    assert(v->type == LVAL_SEXPR);
+
+    LASSERT_ARG_COUNT("fun", v, 2);
+    LASSERT_ARG_TYPE("fun", v, 0, LVAL_QEXPR);
+    LASSERT_ARG_TYPE("fun", v, 1, LVAL_QEXPR);
+
+    lval *symbol_list = v->sexpr.cell[0];
+
+    LASSERT(v, symbol_list->qexpr.count >= 2,
+            "Function 'fun' requires at least one function argument in function declaration.");
+
+    for (int i = 0; i < symbol_list->qexpr.count; i++) { \
+        LASSERT(v, symbol_list->qexpr.cell[i]->type == LVAL_SYMBOL,
+                "Expected type '%s', got type '%s'",
+                lval_type_name(LVAL_SYMBOL), lval_type_name(v->sexpr.cell[i]->type));
+    }
+
+    lval *fun_name = lval_expr_pop(&symbol_list->qexpr, 0);
+    lval *params = symbol_list;
+    lval *body = v->sexpr.cell[1];
+    
+    lval *func = lval_func(params, body);
+    lenv_def(e, fun_name->symbol, func);
+
+    return lval_sexpr();
+}
+
 lval *builtin_exit(UNUSED lenv *e, UNUSED lval *v) {
     printf("Exiting REPL\n");
     exit(0);
@@ -328,6 +356,7 @@ static void lenv_add_builtin(lenv *e, char *name, lbuiltin func) {
 static void lenv_add_builtins(lenv *e) {
     lenv_add_builtin(e, "def", builtin_def);
     lenv_add_builtin(e, "=", builtin_put);
+    lenv_add_builtin(e, "fun", builtin_fun);
     lenv_add_builtin(e, "\\", builtin_lambda);
 
     lenv_add_builtin(e, "list", builtin_list);
