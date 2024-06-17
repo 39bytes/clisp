@@ -455,35 +455,6 @@ lval *builtin_put(lenv *e, lval *v) {
     return builtin_var(e, v, "=");
 }
 
-lval *builtin_fun(lenv *e, lval *v) {
-    assert(v->type == LVAL_SEXPR);
-
-    LASSERT_ARG_COUNT("fun", v, 2);
-    LASSERT_ARG_TYPE("fun", v, 0, LVAL_QEXPR);
-    LASSERT_ARG_TYPE("fun", v, 1, LVAL_QEXPR);
-
-    lval *symbol_list = v->sexpr.cell[0];
-
-    LASSERT(v, symbol_list->qexpr.count >= 2,
-            "Function 'fun' requires at least one function argument in function declaration.");
-
-    for (int i = 0; i < symbol_list->qexpr.count; i++) { \
-        LASSERT(v, symbol_list->qexpr.cell[i]->type == LVAL_SYMBOL,
-                "Expected type '%s', got type '%s'",
-                lval_type_name(LVAL_SYMBOL), lval_type_name(v->sexpr.cell[i]->type));
-    }
-
-    lval *fun_name = lval_expr_pop(&symbol_list->qexpr, 0);
-    lval *params = symbol_list;
-    lval *body = v->sexpr.cell[1];
-    
-    lval *func = lval_func(params, body);
-    lenv_def(e, fun_name->symbol, func);
-    printf("Defined function '%s'\n", fun_name->symbol);
-
-    return lval_sexpr();
-}
-
 lval *builtin_print(UNUSED lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
     for (int i = 0; i < v->sexpr.count; i++) {
@@ -515,7 +486,6 @@ lval *builtin_load(lenv *e, lval *v) {
     LASSERT_ARG_TYPE("load", v, 0, LVAL_STRING);
     
     lval *expr = parse_file(v->sexpr.cell[0]->string);
-    lval_println(expr);
     if (expr->type == LVAL_ERROR) {
         lval_del(v);
         return expr;
@@ -550,7 +520,6 @@ static void lenv_add_builtin(lenv *e, char *name, lbuiltin func) {
 static void lenv_add_builtins(lenv *e) {
     lenv_add_builtin(e, "def", builtin_def);
     lenv_add_builtin(e, "=", builtin_put);
-    lenv_add_builtin(e, "fun", builtin_fun);
     lenv_add_builtin(e, "\\", builtin_lambda);
 
     lenv_add_builtin(e, "list", builtin_list);
@@ -582,13 +551,12 @@ static void lenv_add_builtins(lenv *e) {
     lenv_add_builtin(e, "!", builtin_not);
     lenv_add_builtin(e, "if", builtin_if);
 
-    lenv_put(e, "true", lval_bool(true), true);
-    lenv_put(e, "false", lval_bool(false), true);
-
     lenv_add_builtin(e, "print", builtin_print);
     lenv_add_builtin(e, "error", builtin_error);
     lenv_add_builtin(e, "load", builtin_load);
     lenv_add_builtin(e, "exit", builtin_exit);
+
+    load_file(e, "stdlib.lspy");
 }
 
 lenv *lenv_base(void) {

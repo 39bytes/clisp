@@ -5,6 +5,7 @@
 mpc_parser_t* Int;
 mpc_parser_t* Double;
 mpc_parser_t* Number;
+mpc_parser_t* Bool;
 mpc_parser_t* String;
 mpc_parser_t* Comment;
 mpc_parser_t* Sexpr;
@@ -17,6 +18,7 @@ void init_parser(void) {
     Int = mpc_new("int");
     Double = mpc_new("double");
     Number = mpc_new("number");
+    Bool = mpc_new("bool");
     String = mpc_new("string");
     Comment = mpc_new("comment");
     Sexpr = mpc_new("sexpr");
@@ -30,19 +32,20 @@ void init_parser(void) {
             int      : /-?[0-9]+/ ;                                         \
             double   : /-?[0-9]+/ '.' /[0-9]+/ ;                            \
             number   : <double> | <int> ;                                   \
+            bool     : \"true\" | \"false\" ;                               \
             string   : /\"(\\\\.|[^\"])*\"/ ;                               \
             comment  : /;[^\\r\\n]*/ ;                                      \
             symbol   : /[a-zA-Z0-9_+\\-*\\/\\\\=<>!&\\|]+/ ;                \
             sexpr    : '(' <expr>* ')' ;                                    \
             qexpr    : '{' <expr>* '}' ;                                    \
-            expr     : <number> | <symbol> | <string> | <comment> | <sexpr> | <qexpr> ; \
+            expr     : <number> | <bool> | <symbol> | <string> | <comment> | <sexpr> | <qexpr> ; \
             lispy    : /^/ <expr>* /$/ ;                                    \
         ",
-        Int, Double, Number, String, Comment, Symbol, Sexpr, Qexpr, Expr, Lispy);
+        Int, Double, Number, Bool, String, Comment, Symbol, Sexpr, Qexpr, Expr, Lispy);
 }
 
 void cleanup_parser(void) {
-    mpc_cleanup(10, Int, Double, Number, String, Comment, Symbol, Sexpr, Qexpr, Expr, Lispy);
+    mpc_cleanup(11, Int, Double, Number, Bool, String, Comment, Symbol, Sexpr, Qexpr, Expr, Lispy);
 }
 
 

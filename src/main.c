@@ -31,16 +31,7 @@ int main(int argc, char** argv) {
 
     if (argc >= 2) {
         for (int i = 1; i < argc; i++) {
-            lval *args = lval_sexpr();
-            printf("Loading file %s\n", argv[i]);
-            lval_expr_push_back(&args->sexpr, lval_string(argv[i]));
-
-            lval *x = builtin_load(e, args);
-
-            if (x->type == LVAL_ERROR) {
-                lval_println(x);
-            }
-            lval_del(x);
+            load_file(e, argv[i]);
         }
     }
 
@@ -56,8 +47,6 @@ int main(int argc, char** argv) {
         add_history(input);
         free(input);
     }
-    
-
     
     lenv_del(e);
     cleanup_parser();

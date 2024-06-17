@@ -170,6 +170,10 @@ static lval *lval_read_double(mpc_ast_t *t) {
 
     return errno != ERANGE ? lval_double(x) : lval_error("invalid floating point number");
 }
+static lval *lval_read_bool(mpc_ast_t *t) {
+    bool b = strcmp(t->contents, "true") == 0 ? true : false;
+    return lval_bool(b);
+}
 
 static lval *lval_read_string(mpc_ast_t *t) {
     // Remove last quote char
@@ -242,6 +246,7 @@ lval *lval_take(lval* v, int i) {
 lval *lval_read(mpc_ast_t *t) {
     if (strstr(t->tag, "int")) { return lval_read_int(t); }
     if (strstr(t->tag, "double")) { return lval_read_double(t); }
+    if (strstr(t->tag, "bool")) { return lval_read_bool(t); }
     if (strstr(t->tag, "string")) { return lval_read_string(t); }
     if (strstr(t->tag, "symbol")) { return lval_symbol(t->contents); }
 
