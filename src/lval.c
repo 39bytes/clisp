@@ -428,6 +428,7 @@ void lenv_def(lenv *e, char *k, lval *v) {
 }
 
 lval *lval_eval(lenv* e, lval* v);
+lval *builtin_list(lenv *e, lval *v);
 
 static lval *lval_call(lenv *e, lval *f, lval *a) {
     assert(f->type == LVAL_BUILTIN_FUNC || f->type == LVAL_LAMBDA);
@@ -438,17 +439,32 @@ static lval *lval_call(lenv *e, lval *f, lval *a) {
     }
 
     lval_lambda *func = &f->lambda;
+    lval_expr *params = &func->formals->qexpr;
     
     int passed = a->sexpr.count;
-    int expected = func->formals->qexpr.count;
+    int expected = params->count;
 
-    if (a->sexpr.count > func->formals->qexpr.count) {
-        lval_del(a);
-        return lval_error("Function received too many arguments. Got %i, expected %i", passed, expected);
-    }
-    
     while (a->sexpr.count > 0) {
-        lval *symbol = lval_expr_pop(&func->formals->qexpr, 0);
+        if (params->count == 0) {
+            lval_del(a);
+            return lval_error("Function received too many arguments. Got %i, expected %i", passed, expected);
+        }
+
+        lval *symbol = lval_expr_pop(params, 0);
+
+        if (strcmp(symbol->symbol, "&") == 0) {
+            if (params->count != 1) {
+                lval_del(a);
+                return lval_error("Syntax error: expected a single symbol after '&'");
+            }
+            
+            lval *rest = lval_expr_pop(params, 0);
+            lenv_put(func->env, rest->symbol, builtin_list(e, a), false);
+            lval_del(symbol);
+            lval_del(rest);
+            break;
+        }
+
         lval *val = lval_expr_pop(&a->sexpr, 0);
 
         lenv_put(func->env, symbol->symbol, val, false);
@@ -458,6 +474,25 @@ static lval *lval_call(lenv *e, lval *f, lval *a) {
     }
 
     lval_del(a);
+
+    if (params->count > 0 && 
+        strcmp(params->cell[0]->symbol, "&") == 0) {
+        
+        if (params->count != 2) {
+            return lval_error("Syntax error: expected a single symbol after '&'");
+        }
+        
+        // Delete '&'
+        lval_del(lval_expr_pop(params, 0));
+
+        // Pop next symbol and create empty list
+        lval *rest = lval_expr_pop(params, 0);
+        lval *val = lval_qexpr();
+        
+        lenv_put(func->env, rest->symbol, val, false);
+        lval_del(rest);
+        lval_del(val);
+    }
 
     if (func->formals->qexpr.count == 0) {
         func->env->parent = e;

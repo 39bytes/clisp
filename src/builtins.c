@@ -107,39 +107,39 @@ static lval *builtin_op(UNUSED lenv *e, lval *v, char *op) {
     return x;
 }
 
-static lval *builtin_add(lenv *e, lval *a) {
+lval *builtin_add(lenv *e, lval *a) {
     return builtin_op(e, a, "+");
 }
 
-static lval *builtin_sub(lenv *e, lval *a) {
+lval *builtin_sub(lenv *e, lval *a) {
     return builtin_op(e, a, "-");
 }
 
-static lval *builtin_mul(lenv *e, lval *a) {
+lval *builtin_mul(lenv *e, lval *a) {
     return builtin_op(e, a, "*");
 }
 
-static lval *builtin_div(lenv *e, lval *a) {
+lval *builtin_div(lenv *e, lval *a) {
     return builtin_op(e, a, "/");
 }
 
-static lval *builtin_mod(lenv *e, lval *a) {
+lval *builtin_mod(lenv *e, lval *a) {
     return builtin_op(e, a, "%");
 }
 
-static lval *builtin_pow(lenv *e, lval *a) {
+lval *builtin_pow(lenv *e, lval *a) {
     return builtin_op(e, a, "^");
 }
 
-static lval *builtin_min(lenv *e, lval *a) {
+lval *builtin_min(lenv *e, lval *a) {
     return builtin_op(e, a, "min");
 }
 
-static lval *builtin_max(lenv *e, lval *a) {
+lval *builtin_max(lenv *e, lval *a) {
     return builtin_op(e, a, "max");
 }
 
-static lval *builtin_head(UNUSED lenv *e, lval *v) {
+lval *builtin_head(UNUSED lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
 
     LASSERT_ARG_COUNT("head", v, 1);
@@ -154,7 +154,7 @@ static lval *builtin_head(UNUSED lenv *e, lval *v) {
     return arg;
 }
 
-static lval *builtin_tail(UNUSED lenv *e, lval *v) {
+lval *builtin_tail(UNUSED lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
 
     LASSERT_ARG_COUNT("tail", v, 1);
@@ -167,7 +167,7 @@ static lval *builtin_tail(UNUSED lenv *e, lval *v) {
     return arg;
 }
 
-static lval *builtin_list(UNUSED lenv *e, lval *v) {
+lval *builtin_list(UNUSED lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
 
     v->type = LVAL_QEXPR;
@@ -175,7 +175,7 @@ static lval *builtin_list(UNUSED lenv *e, lval *v) {
     return v;
 }
 
-static lval *builtin_eval(UNUSED lenv *e, lval *v) {
+lval *builtin_eval(UNUSED lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
 
     LASSERT_ARG_COUNT("eval", v, 1);
@@ -187,7 +187,7 @@ static lval *builtin_eval(UNUSED lenv *e, lval *v) {
     return lval_eval(e, x);
 }
 
-static lval *builtin_join(UNUSED lenv *e, lval *v) {
+lval *builtin_join(UNUSED lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
 
     lval_expr *sexpr = &v->sexpr;
@@ -210,7 +210,7 @@ static lval *builtin_join(UNUSED lenv *e, lval *v) {
     return x;
 }
 
-static lval *builtin_cons(UNUSED lenv *e, lval *v) {
+lval *builtin_cons(UNUSED lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
     
     lval_expr *sexpr = &v->sexpr;
@@ -224,7 +224,7 @@ static lval *builtin_cons(UNUSED lenv *e, lval *v) {
     return arg2;
 }
 
-static lval *builtin_len(UNUSED lenv *e, lval *v) {
+lval *builtin_len(UNUSED lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
     
     LASSERT_ARG_COUNT("len", v, 1);
@@ -237,7 +237,7 @@ static lval *builtin_len(UNUSED lenv *e, lval *v) {
     return lval_int(len);
 }
 
-static lval *builtin_init(UNUSED lenv *e, lval *v) {
+lval *builtin_init(UNUSED lenv *e, lval *v) {
     assert(v->type == LVAL_SEXPR);
     
     LASSERT_ARG_COUNT("init", v, 1);
@@ -252,7 +252,7 @@ static lval *builtin_init(UNUSED lenv *e, lval *v) {
     return arg;
 }
 
-static lval *builtin_lambda(UNUSED lenv *e, lval *v) {
+lval *builtin_lambda(UNUSED lenv *e, lval *v) {
     LASSERT_ARG_COUNT("\\", v, 2);
     LASSERT_ARG_TYPE("\\", v, 0, LVAL_QEXPR);
     LASSERT_ARG_TYPE("\\", v, 1, LVAL_QEXPR);
@@ -272,7 +272,7 @@ static lval *builtin_lambda(UNUSED lenv *e, lval *v) {
     return lval_func(formals, body);
 }
 
-static lval *builtin_var(UNUSED lenv *e, lval *v, char *func) {
+lval *builtin_var(UNUSED lenv *e, lval *v, char *func) {
     assert(v->type == LVAL_SEXPR);
 
     LASSERT_ARG_TYPE(func, v, 0, LVAL_QEXPR);
@@ -306,15 +306,15 @@ static lval *builtin_var(UNUSED lenv *e, lval *v, char *func) {
     return lval_sexpr();
 }
 
-static lval *builtin_def(lenv *e, lval *v) {
+lval *builtin_def(lenv *e, lval *v) {
     return builtin_var(e, v, "def");
 }
 
-static lval *builtin_put(lenv *e, lval *v) {
+lval *builtin_put(lenv *e, lval *v) {
     return builtin_var(e, v, "=");
 }
 
-static lval *builtin_exit(UNUSED lenv *e, UNUSED lval *v) {
+lval *builtin_exit(UNUSED lenv *e, UNUSED lval *v) {
     printf("Exiting REPL\n");
     exit(0);
 }
