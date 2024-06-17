@@ -10,6 +10,7 @@ char *lval_type_name(enum LVAL_TYPE type) {
     switch (type) {
         case LVAL_INT: return "int";
         case LVAL_DOUBLE: return "double";
+        case LVAL_BOOL: return "bool";
         case LVAL_SYMBOL: return "symbol";
         case LVAL_SEXPR: return "s-expression";
         case LVAL_QEXPR: return "q-expression";
@@ -32,6 +33,13 @@ lval *lval_double(double x) {
     lval *v = malloc(sizeof(lval));
     v->type = LVAL_DOUBLE;
     v->_double = x;
+    return v;
+}
+
+lval *lval_bool(bool x) {
+    lval *v = malloc(sizeof(lval));
+    v->type = LVAL_BOOL;
+    v->_bool = x;
     return v;
 }
 
@@ -96,6 +104,7 @@ void lval_del(lval* v) {
     switch (v->type) {
         case LVAL_INT:
         case LVAL_DOUBLE:
+        case LVAL_BOOL:
         case LVAL_BUILTIN_FUNC:
             break;
         case LVAL_ERROR:
@@ -148,6 +157,11 @@ static lval *lval_read_double(mpc_ast_t *t) {
     free(buf);
 
     return errno != ERANGE ? lval_double(x) : lval_error("invalid floating point number");
+}
+
+static lval *lval_read_bool(mpc_ast_t *t) {
+    bool b = strcmp(t->contents, "true") == 0;
+    return lval_bool(b);
 }
 
 
@@ -206,6 +220,7 @@ lval *lval_take(lval* v, int i) {
 lval *lval_read(mpc_ast_t *t) {
     if (strstr(t->tag, "int")) { return lval_read_int(t); }
     if (strstr(t->tag, "double")) { return lval_read_double(t); }
+    if (strstr(t->tag, "bool")) { return lval_read_bool(t); }
     if (strstr(t->tag, "symbol")) { return lval_symbol(t->contents); }
 
     lval *x = NULL;
@@ -256,6 +271,9 @@ void lval_print(lval *v) {
         case LVAL_DOUBLE:
             printf("%f", v->_double);
             break;
+        case LVAL_BOOL:
+            printf("%s", v->_bool ? "true" : "false");
+            break;
         case LVAL_ERROR:
             printf("Error: %s", v->error);
             break;
@@ -295,6 +313,9 @@ lval *lval_copy(lval* v) {
             break;
         case LVAL_DOUBLE:
             x->_double = v->_double;
+            break;
+        case LVAL_BOOL:
+            x->_bool = v->_bool;
             break;
         case LVAL_BUILTIN_FUNC:
             x->builtin_func = v->builtin_func;

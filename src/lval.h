@@ -4,6 +4,7 @@
 enum LVAL_TYPE { 
     LVAL_INT, 
     LVAL_DOUBLE, 
+    LVAL_BOOL,
     LVAL_SYMBOL,
     LVAL_SEXPR,
     LVAL_QEXPR,
@@ -48,6 +49,7 @@ struct lval {
     union {
         long _int; 
         double _double;
+        bool _bool;
         char *error;
         char *symbol;
         lval_expr sexpr;
@@ -69,6 +71,7 @@ lenv *lenv_base(void);
 
 lval *lval_int(long x);
 lval *lval_double(double x);
+lval *lval_bool(bool x);
 lval *lval_error(char *fmt, ...);
 lval *lval_symbol(char *s);
 lval *lval_sexpr(void);
