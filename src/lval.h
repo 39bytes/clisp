@@ -7,7 +7,8 @@ enum LVAL_TYPE {
     LVAL_SYMBOL,
     LVAL_SEXPR,
     LVAL_QEXPR,
-    LVAL_FUNC,
+    LVAL_BUILTIN_FUNC,
+    LVAL_LAMBDA,
     LVAL_ERROR,
 };
 
@@ -27,27 +28,33 @@ typedef struct {
     bool builtin;
 } lenv_entry;
 
+typedef struct lenv lenv;
 struct lenv {
+    lenv *parent;
     int count;
     lenv_entry **entries;
 };
-typedef struct lenv lenv;
 
 typedef lval*(*lbuiltin)(lenv*, lval*);
 
-typedef union {
-    long _int; 
-    double _double;
-    char *error;
-    char *symbol;
-    lval_expr sexpr;
-    lval_expr qexpr;
-    lbuiltin func;
-} lval_data;
+typedef struct {
+    lenv *env;
+    lval *formals;
+    lval *body;
+} lval_lambda;
 
 struct lval {
     enum LVAL_TYPE type;
-    lval_data data;
+    union {
+        long _int; 
+        double _double;
+        char *error;
+        char *symbol;
+        lval_expr sexpr;
+        lval_expr qexpr;
+        lbuiltin builtin_func;
+        lval_lambda lambda;
+    };
 };
 
 lenv *lenv_new(void);
@@ -55,6 +62,8 @@ void lenv_del(lenv *e);
 lenv_entry *lenv_lookup(lenv *e, char *k);
 lval *lenv_get(lenv *e, char *k);
 void lenv_put(lenv *e, char *k, lval *v, bool builtin);
+void lenv_def(lenv *e, char *k, lval *v);
+lenv *lenv_copy(lenv *e);
 
 lenv *lenv_base(void);
 
@@ -64,7 +73,8 @@ lval *lval_error(char *fmt, ...);
 lval *lval_symbol(char *s);
 lval *lval_sexpr(void);
 lval *lval_qexpr(void);
-lval *lval_func(lbuiltin func);
+lval *lval_builtin_func(lbuiltin func);
+lval *lval_func(lval *formals, lval *body);
 void lval_del(lval* v);
 
 lval *lval_read(mpc_ast_t *t);

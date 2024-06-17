@@ -6,6 +6,7 @@
 #include "../vendor/mpc.h"
 #include "lval.h"
 #include "builtins.h"
+#include "utils.h"
 
 #ifdef _WIN32
 #include <string.h>
@@ -47,7 +48,7 @@ int ast_leaf_count(mpc_ast_t *t) {
 }
 
 
-int main(int argc, char** argv) {
+int main(UNUSED int argc, UNUSED char** argv) {
     mpc_parser_t* Int = mpc_new("int");
     mpc_parser_t* Double = mpc_new("double");
     mpc_parser_t* Number = mpc_new("number");
