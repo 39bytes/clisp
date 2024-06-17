@@ -187,47 +187,6 @@ lval *builtin_gte(UNUSED lenv *e, lval *v) {
     return builtin_ord(v, ">=");
 }
 
-bool lval_eq(lval *a, lval *b) {
-    if (a->type != b->type) {
-        return false;
-    }
-    
-    switch(a->type) {
-        case LVAL_INT:
-            return a->_int == b->_int;
-        case LVAL_DOUBLE:
-            return a->_double == b->_double;
-        case LVAL_BOOL:
-            return a->_bool == b->_bool;
-        case LVAL_ERROR:
-            return strcmp(a->error, b->error) == 0;
-        case LVAL_SYMBOL:
-            return strcmp(a->symbol, b->symbol) == 0;
-        case LVAL_BUILTIN_FUNC:
-            return a->builtin_func == b->builtin_func;
-        case LVAL_LAMBDA:
-            return lval_eq(a->lambda.formals, b->lambda.formals) && 
-                   lval_eq(a->lambda.body, b->lambda.body);
-        case LVAL_SEXPR:
-        case LVAL_QEXPR: {
-            lval_expr *ae = a->type == LVAL_SEXPR ? &a->sexpr : &a->qexpr;
-            lval_expr *be = b->type == LVAL_SEXPR ? &b->sexpr : &b->qexpr;
-
-            if (ae->count != be->count) {
-                return false;
-            }
-            for (int i = 0; i < ae->count; i++) {
-                if (!lval_eq(ae->cell[i], be->cell[i])) {
-                    return false;
-                }
-            }
-            return true;
-        }
-    }
-
-    return false;
-}
-
 lval *builtin_compare(lval *v, char* op) {
     assert(v->type == LVAL_SEXPR);
 
