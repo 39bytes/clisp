@@ -1,3 +1,5 @@
-struct lenv;
+typedef struct lenv lenv;
+typedef struct lval lval;
 
-struct lenv *lenv_base(void);
+lenv *lenv_base(void);
+lval *builtin_load(lenv *e, lval *v);

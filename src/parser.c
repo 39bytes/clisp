@@ -1,5 +1,6 @@
 #include "../vendor/mpc.h"
 #include "lval.h"
+#include "assert.h"
 
 mpc_parser_t* Int;
 mpc_parser_t* Double;
@@ -45,13 +46,32 @@ void cleanup_parser(void) {
 }
 
 
-lval *parse_expr(const char *filename, const char *string) {
+lval *parse_expr(const char *string) {
     mpc_result_t r;
 
-    if (!mpc_parse(filename, string, Lispy, &r)) {
+    if (!mpc_parse("<stdin>", string, Lispy, &r)) {
         mpc_err_print(r.error);
         mpc_err_delete(r.error);
         return NULL;
     }
     return lval_read(r.output);
+}
+
+lval *parse_file(const char *filename) {
+    mpc_result_t r;
+    
+    if (!mpc_parse_contents(filename, Lispy, &r)) {
+        char *err_msg = mpc_err_string(r.error);
+        mpc_err_delete(r.error);
+        
+        lval *err = lval_error("Could not load file %s", err_msg);
+        free(err_msg);
+        return err;
+    } 
+
+    lval *expr = lval_read(r.output);
+    assert(expr->type == LVAL_SEXPR);
+    mpc_ast_delete(r.output);
+
+    return expr;
 }

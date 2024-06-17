@@ -1,6 +1,7 @@
 #include <assert.h>
 #include "lval.h"
 #include "utils.h"
+#include "parser.h"
 
 #define MIN(x,y) (x) < (y) ? (x) : (y)
 #define MAX(x,y) (x) > (y) ? (x) : (y)
@@ -478,6 +479,59 @@ lval *builtin_fun(lenv *e, lval *v) {
     
     lval *func = lval_func(params, body);
     lenv_def(e, fun_name->symbol, func);
+    printf("Defined function '%s'\n", fun_name->symbol);
+
+    return lval_sexpr();
+}
+
+lval *builtin_print(UNUSED lenv *e, lval *v) {
+    assert(v->type == LVAL_SEXPR);
+    for (int i = 0; i < v->sexpr.count; i++) {
+        lval_print(v->sexpr.cell[i]);
+        putchar(' ');
+    }
+
+    putchar('\n');
+    lval_del(v);
+
+    return lval_sexpr();
+}
+
+lval *builtin_error(UNUSED lenv *e, lval *v) {
+    assert(v->type == LVAL_SEXPR);
+    LASSERT_ARG_COUNT("error", v, 1);
+    LASSERT_ARG_TYPE("error", v, 0, LVAL_STRING);
+
+    lval *err = lval_error(v->sexpr.cell[0]->string);
+
+    lval_del(v);
+    return err;
+}
+
+lval *builtin_load(lenv *e, lval *v) {
+    assert(v->type == LVAL_SEXPR);
+
+    LASSERT_ARG_COUNT("load", v, 1);
+    LASSERT_ARG_TYPE("load", v, 0, LVAL_STRING);
+    
+    lval *expr = parse_file(v->sexpr.cell[0]->string);
+    lval_println(expr);
+    if (expr->type == LVAL_ERROR) {
+        lval_del(v);
+        return expr;
+    }
+    
+    assert(expr->type == LVAL_SEXPR);
+    while (expr->sexpr.count > 0) {
+        lval *x = lval_eval(e, lval_expr_pop(&expr->sexpr, 0));
+        if (x->type == LVAL_ERROR) {
+            lval_println(x);
+        }
+        lval_del(x);
+    }
+
+    lval_del(expr);
+    lval_del(v);
 
     return lval_sexpr();
 }
@@ -531,6 +585,9 @@ static void lenv_add_builtins(lenv *e) {
     lenv_put(e, "true", lval_bool(true), true);
     lenv_put(e, "false", lval_bool(false), true);
 
+    lenv_add_builtin(e, "print", builtin_print);
+    lenv_add_builtin(e, "error", builtin_error);
+    lenv_add_builtin(e, "load", builtin_load);
     lenv_add_builtin(e, "exit", builtin_exit);
 }
 
