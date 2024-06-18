@@ -563,7 +563,7 @@ static void lenv_add_builtins(lenv *e) {
     lenv_add_builtin(e, "load", builtin_load);
     lenv_add_builtin(e, "exit", builtin_exit);
 
-    load_file(e, "stdlib.lspy");
+    load_file(e, "lib/stdlib.clsp");
 }
 
 lenv *lenv_base(void) {

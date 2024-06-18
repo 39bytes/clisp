@@ -3,7 +3,7 @@ alias vg := valgrind
 flags := "-std=c99 -Wall -Wextra -Werror"
 source := "src/*"
 link := "-ledit -lm"
-output := "lispy"
+output := "clisp"
 
 build:
     cc -g {{flags}} {{source}} {{link}} -o {{output}} 
@@ -12,10 +12,10 @@ build-release:
     cc {{flags}} -O3 {{source}} {{link}} -o {{output}} 
 
 run: build
-    ./lispy
+    ./{{output}}
 
 valgrind: build
-    valgrind --leak-check=full -s ./lispy 
+    valgrind --leak-check=full -s ./{{output}}
 
 debug: build
-    gdb ./lispy
+    gdb ./{{output}}
