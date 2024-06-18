@@ -1,4 +1,9 @@
 #include <assert.h>
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include "lval.h"
 #include "utils.h"
 #include "parser.h"
@@ -506,8 +511,10 @@ lval *builtin_load(lenv *e, lval *v) {
     return lval_sexpr();
 }
 
-lval *builtin_exit(UNUSED lenv *e, UNUSED lval *v) {
+lval *builtin_exit(lenv *e, lval *v) {
     printf("Exiting REPL\n");
+    lval_del(v);
+    lenv_del(e);
     exit(0);
 }
 

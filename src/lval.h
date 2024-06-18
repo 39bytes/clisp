@@ -1,5 +1,4 @@
 #include <stdbool.h>
-#include "../vendor/mpc.h"
 
 enum LVAL_TYPE { 
     LVAL_INT, 
@@ -84,7 +83,11 @@ lval *lval_func(lval *formals, lval *body);
 bool lval_eq(lval* a, lval *b);
 void lval_del(lval* v);
 
-lval *lval_read(mpc_ast_t *t);
+extern char *lval_str_unescapable;
+extern char *lval_str_escapable;
+
+char lval_str_unescape(char x);
+char *lval_str_escape(char x);
 
 void lval_print(lval *v);
 void lval_println(lval *v);

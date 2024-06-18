@@ -1,8 +1,9 @@
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
-#include "../vendor/mpc.h"
 #include <assert.h>
+#include <string.h>
 #include "lval.h"
 
 
@@ -147,50 +148,6 @@ void lval_del(lval* v) {
     free(v);
 }
 
-static lval *lval_read_int(mpc_ast_t *t) {
-    errno = 0;
-    long x = strtol(t->contents, NULL, 10);
-    return errno != ERANGE ? lval_int(x) : lval_error("invalid number");
-}
-
-static lval *lval_read_double(mpc_ast_t *t) {
-    errno = 0;
-    // Double consists of 3 children
-    // (0) Leading digits before decimal
-    // (1) Decimal
-    // (2) Decimal digits
-    char *buf = malloc(strlen(t->children[0]->contents) + 1 + strlen(t->children[2]->contents) + 1);
-    strcpy(buf, t->children[0]->contents);
-    strcat(buf, t->children[1]->contents);
-    strcat(buf, t->children[2]->contents);
-    strcat(buf, "\0");
-
-    double x = strtod(buf, NULL);
-    free(buf);
-
-    return errno != ERANGE ? lval_double(x) : lval_error("invalid floating point number");
-}
-static lval *lval_read_bool(mpc_ast_t *t) {
-    bool b = strcmp(t->contents, "true") == 0 ? true : false;
-    return lval_bool(b);
-}
-
-static lval *lval_read_string(mpc_ast_t *t) {
-    // Remove last quote char
-    t->contents[strlen(t->contents) - 1] = '\0';
-    // Remove first quote char
-    char *unescaped = malloc(strlen(t->contents + 1) + 1);
-    strcpy(unescaped, t->contents + 1);
-    
-    unescaped = mpcf_unescape(unescaped);
-
-    lval *string = lval_string(unescaped);
-
-    free(unescaped);
-
-    return string;
-}
-
 void lval_expr_push_back(lval_expr* e, lval* x) {
     e->count++;
     e->cell = realloc(e->cell, sizeof(lval*) * e->count);
@@ -243,40 +200,6 @@ lval *lval_take(lval* v, int i) {
     return x;
 }
 
-lval *lval_read(mpc_ast_t *t) {
-    if (strstr(t->tag, "int")) { return lval_read_int(t); }
-    if (strstr(t->tag, "double")) { return lval_read_double(t); }
-    if (strstr(t->tag, "bool")) { return lval_read_bool(t); }
-    if (strstr(t->tag, "string")) { return lval_read_string(t); }
-    if (strstr(t->tag, "symbol")) { return lval_symbol(t->contents); }
-
-    lval *x = NULL;
-    if (strcmp(t->tag, ">") == 0 || strstr(t->tag, "sexpr")) {
-        x = lval_sexpr();
-
-        for (int i = 0; i < t->children_num; i++) {
-            if (strcmp(t->children[i]->contents, "(") == 0) { continue; }
-            if (strcmp(t->children[i]->contents, ")") == 0) { continue; }
-            if (strcmp(t->children[i]->tag, "regex") == 0) { continue; }
-            if (strstr(t->children[i]->tag, "comment")) { continue; }
-            lval_expr_push_back(&x->sexpr, lval_read(t->children[i]));
-        }
-    } else if (strstr(t->tag, "qexpr")) {
-        x = lval_qexpr();
-
-        for (int i = 0; i < t->children_num; i++) {
-            if (strcmp(t->children[i]->contents, "{") == 0) { continue; }
-            if (strcmp(t->children[i]->contents, "}") == 0) { continue; }
-            if (strcmp(t->children[i]->tag, "regex") == 0) { continue; }
-            if (strstr(t->children[i]->tag, "comment")) { continue; }
-            lval_expr_push_back(&x->qexpr, lval_read(t->children[i]));
-        }
-    }
-    
-
-    return x;
-}
-
 static void lval_expr_print(lval *v, char open, char close) {
     assert(v->type == LVAL_SEXPR || v->type == LVAL_QEXPR);
 
@@ -292,15 +215,56 @@ static void lval_expr_print(lval *v, char open, char close) {
     putchar(close);
 }
 
+char *lval_str_unescapable = "abfnrtv\\\'\"";
+char *lval_str_escapable = "\a\b\f\n\r\t\v\\\'\"";
+
+char lval_str_unescape(char x) {
+    switch (x) {
+        case 'a': return '\a';
+        case 'b': return '\b';
+        case 'f': return '\f';
+        case 'n': return '\n';
+        case 'r': return '\r';
+        case 't': return '\t';
+        case 'v': return '\v';
+        case '\\': return '\\';
+        case '\'': return '\'';
+        case '\"': return '\"';
+    }
+    
+    return '\0';
+}
+
+char *lval_str_escape(char x) {
+    switch (x) {
+        case '\a': return "\\a";
+        case '\b': return "\\b";
+        case '\f': return "\\f";
+        case '\n': return "\\n";
+        case '\r': return "\\r";
+        case '\t': return "\\t";
+        case '\v': return "\\v";
+        case '\\': return "\\\\";
+        case '\'': return "\\\'";
+        case '\"': return "\\\"";
+    }
+    return "";
+}
+
 static void lval_str_print(lval *v) {
     assert(v->type == LVAL_STRING);
 
-    char *escaped = malloc(strlen(v->string) + 1);
-    strcpy(escaped, v->string);
-    
-    escaped = mpcf_escape(escaped);
-    printf("\"%s\"", escaped);
-    free(escaped);
+    putchar('"');
+
+    for (size_t i = 0; i < strlen(v->string); i++) {
+        if (strchr(lval_str_escapable, v->string[i])) {
+            printf("%s", lval_str_escape(v->string[i]));
+        } else {
+            putchar(v->string[i]);
+        }
+    }
+
+    putchar('"');
 }
 
 void lval_print(lval *v) {
@@ -458,6 +422,7 @@ void lenv_del(lenv *e) {
     for (int i = 0; i < e->count; i++) {
         free(e->entries[i]->symbol);
         lval_del(e->entries[i]->val);
+        free(e->entries[i]);
     }
 
     free(e->entries);

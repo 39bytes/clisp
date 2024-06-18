@@ -24,7 +24,6 @@ void add_history(char* unused) {}
 #endif
 
 int main(int argc, char** argv) {
-    init_parser();
     puts("Lispy version 0.1.0");
 
     lenv *e = lenv_base();
@@ -37,18 +36,17 @@ int main(int argc, char** argv) {
 
     while (true) {
         char *input = readline("~> ");
-        lval *x = parse_expr(input);
-        if (x != NULL) {
-            lval *v = lval_eval(e, x);
-            lval_println(v);
-            lval_del(v);
-        }
+
+        lval *expr = lval_sexpr();
+        parse_expr(expr, input, 0, '\0');
+        lval *v = lval_eval(e, expr);
+        lval_println(v);
+        lval_del(v);
         
         add_history(input);
         free(input);
     }
     
     lenv_del(e);
-    cleanup_parser();
     return 0;
 }
