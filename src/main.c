@@ -24,8 +24,6 @@ void add_history(char* unused) {}
 #endif
 
 int main(int argc, char** argv) {
-    puts("Lispy version 0.1.0");
-
     lenv *e = lenv_base();
 
     if (argc >= 2) {
