@@ -2,15 +2,13 @@
 #include <assert.h>
 #include <errno.h>
 #include <string.h>
+#include <ctype.h>
 
 #include "lval.h"
 #include "dyn_string.h"
 
 static inline bool valid_symbol_char(char c) {
-    return strchr("abcdefghijklmnopqrstuvwxyz"
-                  "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                  "0123456789_+-*\\/=<>!&",
-                  c) != NULL;
+    return isalpha(c) || strchr("0123456789_+-*\\/=<>!&", c) != NULL;
 }
 
 static inline bool is_numeric(char c) {
@@ -31,42 +29,56 @@ static lval *parse_double(char *s) {
     return errno != ERANGE ? lval_double(x) : lval_error("invalid floating point number");
 }
 
-static int parse_symbol(lval *v, const char *s, int i) {
+static int parse_number(lval *v, const char *s, int i) {
     dyn_string *str = dyn_string_new();
 
-    while (valid_symbol_char(s[i]) && s[i] != '\0') {
+    while ((valid_symbol_char(s[i]) || s[i] == '.') && s[i] != '\0') {
+        if (!is_numeric(s[i])) {
+            return -1;
+        }
         dyn_string_push(str, s[i]);
         i++;
     }
 
-    bool numeric = true;
+    if (strcmp(str->buf, "-") == 0) {
+        return -1;
+    }
+
     bool is_double = false;
     for (size_t i = 0; i < str->len; i++) {
         char c = str->buf[i];
-        if (!is_numeric(c)) {
-            numeric = false;
-            break;
-        }
         if (c == '.') {
             is_double = true;
         }
     }
 
-    if (numeric && strcmp(str->buf, "-") != 0) {
-        if (is_double) {
-            lval_expr_push_back(&v->sexpr, parse_double(str->buf));
-        } else {
-            lval_expr_push_back(&v->sexpr, parse_int(str->buf));
-        }
+    if (is_double) {
+        lval_expr_push_back(&v->sexpr, parse_double(str->buf));
     } else {
-        // Parse bool
-        if (strcmp(str->buf, "true") == 0) {
-            lval_expr_push_back(&v->sexpr, lval_bool(true));
-        } else if (strcmp(str->buf, "false") == 0) {
-            lval_expr_push_back(&v->sexpr, lval_bool(false));
-        } else {
-            lval_expr_push_back(&v->sexpr, lval_symbol(str->buf));
-        }
+        lval_expr_push_back(&v->sexpr, parse_int(str->buf));
+    }
+
+    return i;
+}
+
+static int parse_symbol(lval *v, const char *s, int i) {
+    dyn_string *str = dyn_string_new();
+
+    if (isdigit(s[i])) {
+        lval_expr_push_back(&v->sexpr, lval_error("symbol can't start with a number"));
+    }
+    while (valid_symbol_char(s[i]) && s[i] != '\0') {
+        dyn_string_push(str, s[i]);
+        i++;
+    }
+
+    // Parse bool
+    if (strcmp(str->buf, "true") == 0) {
+        lval_expr_push_back(&v->sexpr, lval_bool(true));
+    } else if (strcmp(str->buf, "false") == 0) {
+        lval_expr_push_back(&v->sexpr, lval_bool(false));
+    } else {
+        lval_expr_push_back(&v->sexpr, lval_symbol(str->buf));
     }
 
     dyn_string_del(str);
@@ -143,6 +155,14 @@ int parse_expr(lval *v, const char *s, int i, char end) {
             lval_expr_push_back(&v->sexpr, x);
             i = parse_expr(x, s, i+1, '}');
             continue;
+        }
+
+        if (is_numeric(s[i])) {
+            int res = parse_number(v, s, i);
+            if (res != -1) {
+                i = res;
+                continue;
+            }
         }
 
         // Read symbol
