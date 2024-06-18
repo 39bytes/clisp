@@ -8,7 +8,7 @@
 #include "dyn_string.h"
 
 static inline bool valid_symbol_char(char c) {
-    return isalpha(c) || strchr("0123456789_+-*\\/=<>!&", c) != NULL;
+    return isalpha(c) || strchr("0123456789_+-*%^\\/=<>!&|", c) != NULL;
 }
 
 static inline bool is_numeric(char c) {

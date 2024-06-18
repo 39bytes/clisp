@@ -43,6 +43,7 @@ static long powli(long x, long y) {
     long res = 1;
     while (y) {
         res *= x;
+        y--;
     }
     return res;
 }
